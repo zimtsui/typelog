@@ -13,22 +13,20 @@ export type Logger<channels extends ClassChannels> = {
 export namespace Channel {
 	export class Definition<levels extends readonly string[] = readonly never[], message = unknown> {
 		public constructor(
-			private channelName: string,
 			private levels: levels,
 			private level: levels[number],
-			private f: (message: message, channelName: string, level: levels[number]) => void,
+			private f: (message: message, level: levels[number]) => void,
 		) {}
 		public log(level: levels[number], message: message): void {
-			if (this.levels.findIndex(l => l === level) >= this.levels.findIndex(l => l === this.level)) this.f(message, this.channelName, level);
+			if (this.levels.findIndex(l => l === level) >= this.levels.findIndex(l => l === this.level)) this.f(message, level);
 		}
 	}
 	export function create<levels extends readonly string[] = readonly never[], message = unknown>(
-		channelName: string,
 		levels: levels,
 		level: levels[number],
-		f: (message: message, channelName: string, level: levels[number]) => void,
+		f: (message: message, level: levels[number]) => void,
 	) {
-		const definition = new Definition<levels, message>(channelName, levels, level, f);
+		const definition = new Definition<levels, message>(levels, level, f);
 		return new Proxy({} as Channel<levels, message>, {
 			get(target, prop) {
 				if (levels.includes(prop as levels[number])) return (message: message) => definition.log(prop as levels[number], message);

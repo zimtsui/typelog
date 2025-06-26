@@ -44,12 +44,11 @@ import { formatWithOptions } from 'node:util';
 const level: typeof Presets.levels[number] = Presets.envlevels[env.NODE_ENV ?? ''] ?? 'info';
 
 export const channel = Channel.create(
-	'Default Channel', Presets.levels, level,
-	(message, channelName, level) => console.error(
+	Presets.levels, level,
+	(message, level) => console.error(
 		Presets.format(
 			formatWithOptions({ depth: null, colors: true }, message),
-			channelName,
-			level,
+			'Default Channel', level,
 		),
 	),
 );
