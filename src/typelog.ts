@@ -1,0 +1,39 @@
+export type Channel<levels extends readonly string[] = readonly never[], message = unknown> = {
+	readonly [level in levels[number]]: (message: message) => void;
+};
+
+export interface ClassChannels {
+	readonly [channelId: string]: readonly [levels: readonly string[], message: unknown];
+}
+
+export type Logger<channels extends ClassChannels> = {
+	readonly [channelId in keyof channels]: Channel<channels[channelId][0], channels[channelId][1]>;
+};
+
+export namespace Channel {
+	export class Definition<levels extends readonly string[] = readonly never[], message = unknown> {
+		public constructor(
+			private channelName: string,
+			private levels: levels,
+			private level: levels[number],
+			private f: (message: message, channelName: string, level: levels[number]) => void,
+		) {}
+		public log(level: levels[number], message: message): void {
+			if (this.levels.findIndex(l => l === level) >= this.levels.findIndex(l => l === this.level)) this.f(message, this.channelName, level);
+		}
+	}
+	export function create<levels extends readonly string[] = readonly never[], message = unknown>(
+		channelName: string,
+		levels: levels,
+		level: levels[number],
+		f: (message: message, channelName: string, level: levels[number]) => void,
+	) {
+		const definition = new Definition<levels, message>(channelName, levels, level, f);
+		return new Proxy({} as Channel<levels, message>, {
+			get(target, prop) {
+				if (levels.includes(prop as levels[number])) return (message: message) => definition.log(prop as levels[number], message);
+				throw new Error();
+			},
+		});
+	}
+}

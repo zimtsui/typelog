@@ -1,0 +1,15 @@
+{
+  "name": "@zimtsui/typelog",
+  "exports": "./build/exports.js",
+  "description": "",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc -b ./src/tsconfig.json",
+    "clean": "rm -rf ./build"
+  },
+  "author": "Zim",
+  "dependencies": {
+    "chalk": "^5.4.1"
+  }
+}
