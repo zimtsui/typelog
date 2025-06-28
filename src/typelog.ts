@@ -1,13 +1,13 @@
 export type Channel<levels extends readonly string[] = readonly never[], message = unknown> = {
-	readonly [level in levels[number]]: (message: message) => void;
+	[level in levels[number]]: (message: message) => void;
 };
 
-export interface ClassChannels {
-	readonly [channelId: string]: readonly [levels: readonly string[], message: unknown];
+export interface Channels {
+	[channelId: string]: readonly [levels: readonly string[], message: unknown];
 }
 
-export type Logger<channels extends ClassChannels> = {
-	readonly [channelId in keyof channels]: Channel<channels[channelId][0], channels[channelId][1]>;
+export type Logger<channels extends Channels> = {
+	[channelId in keyof channels]: Channel<channels[channelId][0], channels[channelId][1]>;
 };
 
 export namespace Channel {
