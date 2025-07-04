@@ -8,6 +8,10 @@
     "build": "tsc -b ./src/tsconfig.json",
     "clean": "rm -rf ./build"
   },
+  "repository": {
+		"type": "git",
+		"url": "https://github.com/zimtsui/typelog.git"
+	},
   "author": "Zim",
   "dependencies": {
     "chalk": "^5.4.1"
