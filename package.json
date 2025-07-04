@@ -1,5 +1,6 @@
 {
   "name": "@zimtsui/typelog",
+  "version": "0.0.1",
   "exports": "./build/exports.js",
   "description": "",
   "type": "module",
@@ -10,7 +11,7 @@
   },
   "repository": {
 		"type": "git",
-		"url": "https://github.com/zimtsui/typelog.git"
+		"url": "https://github.com/zimtsui/typelog"
 	},
   "author": "Zim",
   "dependencies": {
