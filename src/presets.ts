@@ -8,13 +8,13 @@ export const envlevels: Record<string, typeof levels[number]> = {
 	production: 'warn',
 };
 
-export function format(message: string, level: typeof levels[number]): string {
+export function format(message: string, channelName: string, level: typeof levels[number], colored = false): string {
 	switch (level) {
 		case 'warn':
-			return `[${new Date().toLocaleString('zh-CN')}] ${chalk.bgYellow(level)} ${message}`;
+			return `[${new Date().toLocaleString('zh-CN')}] ${channelName} ${colored ? chalk.bgYellow(level) : level} ${message}`;
 		case 'error':
-			return `[${new Date().toLocaleString('zh-CN')}] ${chalk.bgRed(level)} ${message}`;
+			return `[${new Date().toLocaleString('zh-CN')}] ${channelName} ${colored ? chalk.bgRed(level) : level} ${message}`;
 		default:
-			return `[${new Date().toLocaleString('zh-CN')}] ${chalk.bgGray(level)} ${message}`;
+			return `[${new Date().toLocaleString('zh-CN')}] ${channelName} ${colored ? chalk.bgGray(level) : level} ${message}`;
 	}
 }

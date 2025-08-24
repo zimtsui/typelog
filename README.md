@@ -41,7 +41,7 @@ logger.pretty.info('Hello, world!');
 
 ```ts
 import { Presets, Channel } from '@zimtsui/typelog';
-import { env } from 'node:process';
+import { env, stderr } from 'node:process';
 import { formatWithOptions } from 'node:util';
 
 const level: typeof Presets.levels[number] = Presets.envlevels[env.NODE_ENV ?? ''] ?? 'info';
@@ -50,8 +50,9 @@ export const channel = Channel.create(
 	Presets.levels, level,
 	(message, level) => console.error(
 		Presets.format(
-			formatWithOptions({ depth: null, colors: true }, message),
+			formatWithOptions({ depth: null, colors: stderr.isTTY }, message),
 			'Default Channel', level,
+			stderr.isTTY,
 		),
 	),
 );
