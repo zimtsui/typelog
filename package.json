@@ -1,6 +1,6 @@
 {
   "name": "@zimtsui/typelog",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "exports": "./build/exports.js",
   "description": "",
   "type": "module",
