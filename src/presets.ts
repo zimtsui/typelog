@@ -8,7 +8,7 @@ export const envlevels: Record<string, typeof levels[number]> = {
 	production: 'warn',
 };
 
-export function format(message: string, channelName: string, level: typeof levels[number], colored = false): string {
+export function prompt(message: string, channelName: string, level: typeof levels[number], colored = false): string {
 	switch (level) {
 		case 'warn':
 			return `[${new Date().toLocaleString('zh-CN')}] ${channelName} ${colored ? chalk.bgYellow(level) : level} ${message}`;

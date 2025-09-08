@@ -28,8 +28,8 @@ interface Channels {
 
 // create loggers
 const logger: Logger<Channels> = {
-	verbatim: Channel.create(levels, level, (message: string) => stderr.write(message)),
-	pretty: Channel.create(levels, level, (message: unknown) => console.error(message)),
+	verbatim: Channel.create(levels, level, (message: string, level) => message, (message, level) => stderr.write(message)),
+	pretty: Channel.create(levels, level, (message: unknown, level) => message, (message, level) => console.error(message)),
 };
 
 // use loggers
@@ -48,12 +48,9 @@ const level: typeof Presets.levels[number] = Presets.envlevels[env.NODE_ENV ?? '
 
 export const channel = Channel.create(
 	Presets.levels, level,
+	(message, level) => formatWithOptions({ depth: null, colors: stderr.isTTY }, message),
 	(message, level) => console.error(
-		Presets.format(
-			formatWithOptions({ depth: null, colors: stderr.isTTY }, message),
-			'Default Channel', level,
-			stderr.isTTY,
-		),
+		Presets.prompt(message, 'Default Channel', level, stderr.isTTY),
 	),
 );
 ```
