@@ -1,7 +1,10 @@
 {
   "name": "@zimtsui/typelog",
   "version": "0.0.3",
-  "exports": "./build/exports.js",
+  "exports": {
+    ".": "./build/typelog.js",
+    "./presets": "./build/presets.js"
+  },
   "description": "",
   "type": "module",
   "scripts": {
@@ -16,5 +19,8 @@
   "author": "Zim",
   "dependencies": {
     "chalk": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.1"
   }
 }

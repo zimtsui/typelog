@@ -1,12 +1,3 @@
-# TypeLog
-
-[![Npm package version](https://flat.badgen.net/npm/v/@zimtsui/typelog)](https://www.npmjs.com/package/@zimtsui/typelog)
-
-TypeLog is a strongly typed logger for TypeScript.
-
-## Usage
-
-```ts
 import { Channel } from '@zimtsui/typelog';
 import { stderr } from 'node:process';
 
@@ -35,30 +26,3 @@ const logger = {
 // Use loggers.
 logger.verbatim.info('Hello, world!');
 logger.pretty.info('Hello, world!');
-```
-
-## Good Practice for Node.js
-
-```ts
-import { Channel } from '@zimtsui/typelog';
-import * as Presets from '@zimtsui/typelog/presets';
-import { env, stderr } from 'node:process';
-import { formatWithOptions } from 'node:util';
-
-const envLevel = Presets.envlevels[env.NODE_ENV ?? ''] ?? Presets.Level.info;
-
-export const channel = Channel.create(
-	Presets.Level,
-	(message, level) => {
-		if (level >= envLevel) console.error(
-			Presets.prompt(
-				formatWithOptions({ depth: null, colors: stderr.isTTY }, message),
-				'Default Channel',
-				level,
-				stderr.isTTY,
-			),
-		);
-	},
-);
-
-```
