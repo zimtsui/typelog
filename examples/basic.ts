@@ -11,14 +11,15 @@ const envlevels: Record<string, Level> = {
 	production: Level.warn,
 };
 
+// Determine the log level according to the environment variable.
 const envLevel = envlevels[process.env.NODE_ENV ?? ''] ?? Level.info;
 
 // Create loggers.
 const logger = {
-	verbatim: Channel.create(Level, (message: string, level) => {
+	verbatim: Channel.create<typeof Level, string>(Level, (message, level) => {
 		if (level >= envLevel) stderr.write(message);
 	}),
-	pretty: Channel.create(Level, (message: unknown, level) => {
+	pretty: Channel.create<Record<keyof typeof Level, Level>, unknown>(Level, (message, level) => {
 		if (level >= envLevel) console.error(message);
 	}),
 };
