@@ -7,8 +7,7 @@ TypeLog is a strongly typed logger for TypeScript.
 ## Usage
 
 ```ts
-import { Channel } from '@zimtsui/typelog';
-import { stderr } from 'node:process';
+import { Channel, type LogEventTarget, LogEvent } from '@zimtsui/typelog';
 
 // Declare all log levels whose values are sorted from verbose to severe.
 enum Level { trace, debug, info, warn, error }
@@ -21,21 +20,35 @@ const envlevels: Record<string, Level> = {
 };
 
 // Determine the log level according to the environment variable.
-const envLevel = envlevels[process.env.NODE_ENV ?? ''] ?? Level.info;
+declare const ENV: string;
+const envLevel = envlevels[ENV] ?? Level.info;
+
+// Create an event target for listening to log events.
+const eventTarget = new EventTarget() as LogEventTarget<{
+    symbolChannelEventType: [typeof Level, payloadType: symbol];
+    numberChannelEventType: [typeof Level, payloadType: number];
+}>;
+eventTarget.addEventListener('numberChannelEventType', (evt: LogEvent<'numberChannelEventType', typeof Level, number>) => {
+    if (evt.level >= envLevel) console.log(evt.detail satisfies number);
+});
+eventTarget.addEventListener('symbolChannelEventType', (evt: LogEvent<'symbolChannelEventType', typeof Level, symbol>) => {
+    if (evt.level >= envLevel) console.log(evt.detail satisfies symbol);
+});
+
 
 // Create loggers.
 const logger = {
-	verbatim: Channel.create<typeof Level, string>(Level, (message, level) => {
-		if (level >= envLevel) stderr.write(message);
-	}),
-	pretty: Channel.create<Record<keyof typeof Level, Level>, unknown>(Level, (message, level) => {
-		if (level >= envLevel) console.error(message);
+    symbolChannel: Channel.attach(eventTarget, 'symbolChannelEventType', Level),
+    numberChannel: Channel.attach(eventTarget, 'numberChannelEventType', Level),
+	stringChannel: Channel.create<typeof Level, string>(Level, (message, level) => {
+		if (level >= envLevel) console.log(message);
 	}),
 };
 
 // Use loggers.
-logger.verbatim.info('Hello, world!');
-logger.pretty.info('Hello, world!');
+logger.symbolChannel.info(Symbol('Hello, world!'));
+logger.numberChannel.warn(10086);
+logger.stringChannel.trace('Hello, world!');
 ```
 
 ## Good Practice for Node.js
