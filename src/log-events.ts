@@ -28,7 +28,7 @@ export namespace ChannelMap {
     export type Message<channelMap extends ChannelMap.Prototype, eventType extends Names<channelMap>> = channelMap[eventType][1];
     export type EventMap<in out channelMap extends ChannelMap.Prototype> = {
         [eventType in Names<channelMap>]: (
-            evt: LogEvent<eventType, LevelEnum<channelMap, eventType>, Message<channelMap, eventType>>,
+            event: LogEvent<eventType, LevelEnum<channelMap, eventType>, Message<channelMap, eventType>>,
         ) => LogEvent<eventType, LevelEnum<channelMap, eventType>, Message<channelMap, eventType>>;
     };
 }
