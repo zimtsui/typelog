@@ -1,6 +1,6 @@
 {
   "name": "@zimtsui/typelog",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "exports": {
     ".": "./build/typelog.js",
     "./typed-events": "./build/typed-events.js",
@@ -26,6 +26,6 @@
     "ava": "^6.4.1"
   },
   "ava": {
-		"failWithoutAssertions": false
-	}
+    "failWithoutAssertions": false
+  }
 }
