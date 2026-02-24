@@ -11,8 +11,21 @@ export namespace EventMap {
     }
 }
 
-export type EventTarget<eventTypes extends string, eventMap extends EventMap.Prototype<eventTypes>>
-    = EventTarget.Pub<eventTypes, eventMap> & EventTarget.Sub<eventTypes, eventMap>;
+export interface EventTarget<eventTypes extends string, eventMap extends EventMap.Prototype<eventTypes>>
+    extends EventTarget.Pub<eventTypes, eventMap>, EventTarget.Sub<eventTypes, eventMap>
+{
+    addEventListener<eventType extends eventTypes>(
+        eventType: eventType,
+        listener: EventListener<ReturnType<eventMap[eventType]>> | EventListenerObject | null,
+        options?: AddEventListenerOptions | boolean,
+    ): void;
+    dispatchEvent<eventType extends eventTypes>(event: Parameters<eventMap[eventType]>[0]): boolean;
+    removeEventListener<eventType extends eventTypes>(
+        eventType: eventType,
+        listener: EventListener<ReturnType<eventMap[eventType]>> | EventListenerObject | null,
+        options?: EventListenerOptions | boolean,
+    ): void;
+}
 
 export namespace EventTarget {
     export interface Pub<
