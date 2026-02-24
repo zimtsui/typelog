@@ -66,7 +66,7 @@ export const channel = Channel.create(
 	(message, level) => {
 		if (level >= envLevel) console.error(
 			Presets.prompt(
-				formatWithOptions({ depth: null, colors: stderr.isTTY }, message),
+				formatWithOptions({ depth: null, colors: !!stderr.isTTY }, message),
 				'Default',
 				level,
 				stderr.isTTY,
