@@ -24,5 +24,8 @@
   },
   "devDependencies": {
     "ava": "^6.4.1"
-  }
+  },
+  "ava": {
+		"failWithoutAssertions": false
+	}
 }
