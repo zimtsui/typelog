@@ -3,6 +3,7 @@
   "version": "0.0.5",
   "exports": {
     ".": "./build/typelog.js",
+    "./typed-events": "./build/typed-events.js",
     "./presets": "./build/presets.js"
   },
   "description": "",
@@ -10,7 +11,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc -b ./src/tsconfig.json",
-    "clean": "rm -rf ./build"
+    "clean": "rm -rf ./build",
+    "prepublishOnly": "npm run clean && npm run build"
   },
   "repository": {
     "type": "git",
@@ -19,8 +21,5 @@
   "author": "Zim",
   "dependencies": {
     "chalk": "^5.4.1"
-  },
-  "devDependencies": {
-    "@types/node": "^22.18.1"
   }
 }
