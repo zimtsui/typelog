@@ -3,7 +3,7 @@
   "version": "0.0.11",
   "exports": {
     ".": "./build/exports.js",
-    "./typed": "./build/typed-events.js",
+    "./typed-events": "./build/typed-events.js",
     "./presets": "./build/presets.js"
   },
   "description": "",
