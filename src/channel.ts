@@ -22,6 +22,13 @@ export namespace Channel {
         });
     }
 
+    export function transport<message>(
+        f: (message: message) => void,
+        signal?: AbortSignal,
+    ) {
+        return (message: message) => signal?.aborted ? void undefined : f(message);
+    }
+
     export function attach<
         channelMap extends ChannelMap.Prototype,
         eventType extends ChannelMap.Names<channelMap>,
