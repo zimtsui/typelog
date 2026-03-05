@@ -4,7 +4,9 @@
   "exports": {
     ".": "./build/exports.js",
     "./typed-events": "./build/typed-events.js",
-    "./presets": "./build/presets.js"
+    "./presets": "./build/presets.js",
+    "./tracer": "./build/tracer.js",
+    "./stage": "./build/stage.js"
   },
   "description": "",
   "type": "module",
@@ -23,9 +25,15 @@
     "chalk": "^5.6.2"
   },
   "devDependencies": {
+    "@opentelemetry/sdk-node": "^0.213.0",
+    "@opentelemetry/sdk-trace-node": "^2.6.0",
     "ava": "^6.4.1"
   },
   "ava": {
     "failWithoutAssertions": false
+  },
+  "peerDependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@types/node": "^22.19.13"
   }
 }

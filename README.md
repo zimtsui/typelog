@@ -2,9 +2,9 @@
 
 [![Npm package version](https://flat.badgen.net/npm/v/@zimtsui/typelog)](https://www.npmjs.com/package/@zimtsui/typelog)
 
-TypeLog is a strongly typed logger for TypeScript.
+TypeLog is a strongly typed logger for concurrent TypeScript programs.
 
-## Usage
+## Channel
 
 ```ts
 import { Channel, type LogEventTarget, LogEvent } from '@zimtsui/typelog';
@@ -74,4 +74,89 @@ export const channel = Channel.create(
 		);
 	},
 );
+```
+
+## Tracer
+
+```ts
+import { Tracer } from '@zimtsui/typelog/tracer';
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { ConsoleSpanExporter } from '@opentelemetry/sdk-trace-base';
+
+const sdk = new NodeSDK({
+    traceExporter: new ConsoleSpanExporter(),
+});
+sdk.start();
+const tracer = Tracer.create('example', '0.0.1');
+
+class A {
+    @tracer.activeAsync()
+    public async f2(x: number): Promise<string> {
+        return f3(x);
+    }
+    @tracer.activeSync()
+    public f4(x: number): string  {
+        return String(x);
+    }
+}
+const a = new A();
+
+namespace F3 {
+    export function create() {
+        function f3(x: number): string {
+            return a.f4(x);
+        }
+        return (x: number) => tracer.activateSync(f3.name, () => f3(x));
+    }
+}
+const f3 = F3.create();
+
+namespace F1 {
+    export function create() {
+        async function f1(x: number): Promise<string> {
+            return await a.f2(x);
+        }
+        return (x: number) => tracer.activateAsync(f1.name, () => f1(x));
+    }
+}
+const f1 = F1.create();
+
+console.log(await f1(100));
+await sdk.shutdown();
+```
+
+## Stage
+
+```ts
+import * as Stage from '@zimtsui/typelog/stage';
+
+function forkListener(slave: Stage.Thread, master?: Stage.Thread) {
+    if (master)
+        console.log(`Thread ${slave.name}(${slave.threadId}) forked from ${master.name}(${master.threadId})`);
+    else
+        console.log(`Thread ${slave.name}(${slave.threadId}) spawned`);
+}
+
+function joinListener(slave: Stage.Thread, master?: Stage.Thread) {
+    if (master)
+        console.log(`Thread ${slave.name}(${slave.threadId}) joined to ${master.name}(${master.threadId})`);
+    else
+        console.log(`Thread ${slave.name}(${slave.threadId}) terminated`);
+}
+
+async function f3(x: number) {
+    const a = Stage.fork(f1.name, () => f1(x), forkListener);
+    const b = Stage.fork(f1.name, () => f1(x + 1), forkListener);
+    const p = await Stage.join(a, joinListener);
+    const q = await Stage.join(b, joinListener);
+    return p + q;
+}
+
+async function f1(x: number) {
+    return await Stage.fork(f1.name, () => f2(x), forkListener);
+}
+
+async function f2(x: number) {
+    return String(x);
+}
 ```
