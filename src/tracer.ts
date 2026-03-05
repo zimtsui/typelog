@@ -4,8 +4,8 @@ import * as OTEL from '@opentelemetry/api';
 
 export type Tracer = Tracer.Instance;
 export namespace Tracer {
-    export function create(sope: string, version?: string): Instance {
-        return new Instance(sope, version);
+    export function create(scope: string, version?: string): Instance {
+        return new Instance(scope, version);
     }
     export class Instance {
         protected otelTracer: OTEL.Tracer;
