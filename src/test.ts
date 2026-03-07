@@ -92,7 +92,7 @@ test('fallback default stream writes formatted payload when level passes thresho
     });
 
     const payload = { answer: 42 };
-    Fallback.Exporter.defau1t.stream({ channel: 'main', payload, level: Level.info });
+    Fallback.Exporter.defau1t.stream({ scope: 'svc.auth', channel: 'main', payload, level: Level.info });
 
     t.is(writes.length, 1);
     t.is(writes[0], formatWithOptions({ depth: null, colors: !!stderr.isTTY }, payload));
@@ -109,9 +109,41 @@ test('fallback default stream skips output when level is below threshold', (t) =
         (stderr as any).write = originalWrite;
     });
 
-    Fallback.Exporter.defau1t.stream({ channel: 'main', payload: 'trace-data', level: Level.trace });
+    Fallback.Exporter.defau1t.stream({ scope: 'svc.auth', channel: 'main', payload: 'trace-data', level: Level.trace });
 
     t.is(writes, 0);
+});
+
+test('fallback default monolith writes scope and channel in header', (t) => {
+    const originalWrite = stderr.write;
+    const originalGetActiveSpan = OTEL.trace.getActiveSpan;
+    const writes: string[] = [];
+    (stderr as any).write = (chunk: unknown) => {
+        writes.push(String(chunk));
+        return true;
+    };
+    (OTEL.trace as any).getActiveSpan = () => undefined;
+    t.teardown(() => {
+        (stderr as any).write = originalWrite;
+        (OTEL.trace as any).getActiveSpan = originalGetActiveSpan;
+    });
+
+    Fallback.Exporter.defau1t.monolith({
+        scope: 'svc.billing',
+        channel: 'orders',
+        payload: { id: 7 },
+        level: Level.info,
+    });
+
+    t.is(writes.length, 1);
+    const output = writes[0];
+    if (output === undefined) {
+        t.fail('expected monolith output');
+        return;
+    }
+    t.true(output.includes('svc.billing'));
+    t.true(output.includes('orders'));
+    t.true(output.includes('{ id: 7 }'));
 });
 
 test('Tracer.create forwards scope and version to OTEL.trace.getTracer', (t) => {
