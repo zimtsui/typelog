@@ -1,8 +1,11 @@
 import test from 'ava';
 import * as OTEL from '@opentelemetry/api';
+import { formatWithOptions } from 'node:util';
+import { stderr } from 'node:process';
 import { Channel } from './channel.ts';
+import * as Fallback from './fallback.ts';
 import { LogEvent, type LogEventTarget } from './log-events.ts';
-import { Level, envlevels, prompt } from './presets.ts';
+import { Level, envlevels } from './presets.ts';
 import * as Stage from './stage.ts';
 import { Tracer } from './tracer.ts';
 
@@ -73,13 +76,42 @@ test('presets.envlevels maps environments to expected levels', (t) => {
     t.is(envlevels.production, Level.warn);
 });
 
-test('presets.prompt includes channel, level and message', (t) => {
-    const result = prompt('hello', 'Chan', Level.info, false);
+test('fallback.exporter defaults to Exporter.defau1t', (t) => {
+    t.is(Fallback.exporter, Fallback.Exporter.defau1t);
+});
 
-    t.true(result.startsWith('['));
-    t.true(result.includes('Chan'));
-    t.true(result.includes('info'));
-    t.true(result.includes('hello'));
+test('fallback default stream writes formatted payload when level passes threshold', (t) => {
+    const originalWrite = stderr.write;
+    const writes: string[] = [];
+    (stderr as any).write = (chunk: unknown) => {
+        writes.push(String(chunk));
+        return true;
+    };
+    t.teardown(() => {
+        (stderr as any).write = originalWrite;
+    });
+
+    const payload = { answer: 42 };
+    Fallback.Exporter.defau1t.stream({ channel: 'main', payload, level: Level.info });
+
+    t.is(writes.length, 1);
+    t.is(writes[0], formatWithOptions({ depth: null, colors: !!stderr.isTTY }, payload));
+});
+
+test('fallback default stream skips output when level is below threshold', (t) => {
+    const originalWrite = stderr.write;
+    let writes = 0;
+    (stderr as any).write = () => {
+        writes += 1;
+        return true;
+    };
+    t.teardown(() => {
+        (stderr as any).write = originalWrite;
+    });
+
+    Fallback.Exporter.defau1t.stream({ channel: 'main', payload: 'trace-data', level: Level.trace });
+
+    t.is(writes, 0);
 });
 
 test('Tracer.create forwards scope and version to OTEL.trace.getTracer', (t) => {
