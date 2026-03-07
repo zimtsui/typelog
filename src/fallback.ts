@@ -10,6 +10,7 @@ import * as Stage from './stage.ts';
 export const envLevel = Presets.envlevels[env.NODE_ENV ?? ''] ?? Presets.Level.info;
 
 export interface Message {
+    scope: string;
     channel: string;
     payload: unknown;
     level: Presets.Level;
@@ -26,7 +27,6 @@ export namespace Exporter {
             const timeString = `[${new Date().toLocaleString('zh-CN')}]`;
 
             if (!!stderr.isTTY) {
-
                 const levelString = (() => {
                     switch (message.level) {
                         case Presets.Level.warn: return Chalk.bgYellow(Presets.Level[message.level]);
@@ -35,18 +35,20 @@ export namespace Exporter {
                         default: return Chalk.bgGray(Presets.Level[message.level]);
                     }
                 })();
+                const scopeString = message.scope;
                 const channelString = Chalk.bgBlue(message.channel);
                 const payloadString = formatWithOptions({ depth: null, colors: true }, message.payload);
                 const thread = Stage.getThread();
                 const traceString = thread ? `(${thread.name})` : '';
                 if (traceString)
-                    stderr.write(`${timeString} ${levelString} ${channelString} ${traceString} ${payloadString}\n`);
+                    stderr.write(`${timeString} ${levelString} ${scopeString} ${channelString} ${traceString}\n${payloadString}\n`);
                 else
-                    stderr.write(`${timeString} ${levelString} ${channelString} ${payloadString}\n`);
+                    stderr.write(`${timeString} ${levelString} ${scopeString} ${channelString}\n${payloadString}\n`);
 
             } else {
 
                 const levelString = Presets.Level[message.level];
+                const scopeString = message.scope;
                 const channelString = message.channel;
                 const payloadString = formatWithOptions({ depth: null, colors: false }, message.payload);
                 const span = OTEL.trace.getActiveSpan();
@@ -54,9 +56,9 @@ export namespace Exporter {
                 const spanId = span?.spanContext().spanId;
                 const traceString = traceId && spanId ? `(${traceId}:${spanId})` : '';
                 if (traceString)
-                    stderr.write(`${timeString} ${levelString} ${channelString} ${traceString} ${payloadString}\n`);
+                    stderr.write(`${timeString} ${levelString} ${scopeString} ${channelString} ${traceString}\n${payloadString}\n`);
                 else
-                    stderr.write(`${timeString} ${levelString} ${channelString} ${payloadString}\n`);
+                    stderr.write(`${timeString} ${levelString} ${scopeString} ${channelString}\n${payloadString}\n`);
             }
         },
 
