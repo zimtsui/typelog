@@ -6,7 +6,8 @@
     "./typed-events": "./build/typed-events.js",
     "./presets": "./build/presets.js",
     "./tracer": "./build/tracer.js",
-    "./stage": "./build/stage.js"
+    "./stage": "./build/stage.js",
+    "./fallback": "./build/fallback.js"
   },
   "description": "",
   "type": "module",

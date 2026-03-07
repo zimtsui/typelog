@@ -60,3 +60,7 @@ export function sync<T>(
 ): globalThis.Promise<T> {
     return join(fork(name, fn, forkListener), joinListener);
 }
+
+export function getThread(): Thread | undefined {
+    return als.getStore();
+}
