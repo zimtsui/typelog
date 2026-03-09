@@ -9,6 +9,9 @@ import { Level, envlevels } from './presets.ts';
 import * as Stage from './stage.ts';
 import { Tracer } from './tracer.ts';
 
+const noopForked = (_slave: Stage.Thread) => {};
+const noopJoined = (_slave: Stage.Thread, _e?: unknown) => {};
+
 test('Channel.create forwards message and level', (t) => {
     enum LevelLocal {
         trace,
@@ -29,6 +32,26 @@ test('Channel.create forwards message and level', (t) => {
         ['hello', LevelLocal.trace],
         ['world', LevelLocal.info],
     ]);
+});
+
+test('Channel.create skips handler when signal is aborted', (t) => {
+    enum LevelLocal {
+        trace,
+    }
+    const controller = new AbortController();
+    let called = 0;
+    const channel = Channel.create<typeof LevelLocal, string>(
+        LevelLocal,
+        () => {
+            called += 1;
+        },
+        controller.signal,
+    );
+
+    controller.abort();
+    channel.trace('hello');
+
+    t.is(called, 0);
 });
 
 test('Channel.create throws on unknown level access', (t) => {
@@ -59,6 +82,39 @@ test('Channel.attach dispatches LogEvent with level and detail', (t) => {
     t.is(received?.type, 'log');
     t.is(received?.level, Level.warn);
     t.is(received?.detail, 42);
+});
+
+test('Channel.attach skips dispatch once signal is aborted', (t) => {
+    type MyMap = {
+        log: [typeof Level, number];
+    };
+    const controller = new AbortController();
+    const eventTarget = new EventTarget() as LogEventTarget<MyMap>;
+    const channel = Channel.attach(eventTarget, 'log', Level, controller.signal);
+    let received = 0;
+    eventTarget.addEventListener('log', () => {
+        received += 1;
+    });
+
+    controller.abort();
+    const result = channel.warn(42);
+
+    t.is(received, 0);
+    t.not(result, false);
+});
+
+test('Channel.transport forwards message unless aborted', (t) => {
+    const controller = new AbortController();
+    const seen: string[] = [];
+    const transport = Channel.transport<string>((message) => {
+        seen.push(message);
+    }, controller.signal);
+
+    transport('before');
+    controller.abort();
+    transport('after');
+
+    t.deepEqual(seen, ['before']);
 });
 
 test('LogEvent stores type, level and detail', (t) => {
@@ -329,25 +385,29 @@ test('Stage.forkSync creates non-running slave under current thread', (t) => {
     t.false(slave.running);
     t.true(master.slaves.has(slave));
 
-    Stage.joinSync(slave);
+    Stage.joinSync(slave, noopJoined);
     t.false(master.slaves.has(slave));
 });
 
 test('Stage.fork returns Stage.Promise and runs callback in spawned thread', async (t) => {
     const master = Stage.getThread();
     let inside: Stage.Thread | undefined;
+    let forked: Stage.Thread | undefined;
     const p = Stage.fork('job', async () => {
         inside = Stage.getThread();
         return 'ok';
+    }, (thread) => {
+        forked = thread;
     });
 
     t.true(p instanceof Stage.Promise);
     t.is(p.thread.name, 'job');
+    t.is(forked, p.thread);
     t.is(await p, 'ok');
     t.is(inside, p.thread);
     t.false(p.thread.running);
 
-    await Stage.join(p);
+    await Stage.join(p, noopJoined);
     t.false(master.slaves.has(p.thread));
 });
 
@@ -355,7 +415,7 @@ test('Stage.join resolves original value and detaches slave from master', async 
     const master = Stage.getThread();
     let seenSlave: Stage.Thread | undefined;
 
-    const p = Stage.fork('join-job', async () => 7);
+    const p = Stage.fork('join-job', async () => 7, noopForked);
     const result = await Stage.join(p, (slave) => {
         seenSlave = slave;
     });
@@ -365,43 +425,43 @@ test('Stage.join resolves original value and detaches slave from master', async 
     t.false(master.slaves.has(p.thread));
 });
 
-test('Stage.switchThread swaps running states and rejects occupied target', (t) => {
+test('Stage.sw1tch swaps running states and rejects occupied target', (t) => {
     const current = Stage.getThread();
-    t.throws(() => Stage.switchThread(current), { message: /already occupied/ });
+    t.throws(() => Stage.sw1tch(current), { message: /already occupied/ });
 
-    const slave = Stage.forkSync('switch-target');
-    const previous = Stage.switchThread(slave);
-    t.is(previous, current);
+    const slave = Stage.forkSync('switch-target', noopForked);
+    const result = Stage.sw1tch(slave);
+    t.is(result, undefined);
     t.is(Stage.getThread(), slave);
     t.true(slave.running);
-    t.false(previous.running);
+    t.false(current.running);
 
-    Stage.switchThread(previous);
-    Stage.joinSync(slave);
+    Stage.sw1tch(current);
+    Stage.joinSync(slave, noopJoined);
 });
 
 test('Stage.joinSync rejects joining from non-master thread', (t) => {
     const root = Stage.getThread();
-    const a = Stage.forkSync('a');
-    const b = Stage.forkSync('b');
-    Stage.switchThread(b);
+    const a = Stage.forkSync('a', noopForked);
+    const b = Stage.forkSync('b', noopForked);
+    Stage.sw1tch(b);
 
-    t.throws(() => Stage.joinSync(a), { message: /not a slave of the current thread/ });
+    t.throws(() => Stage.joinSync(a, noopJoined), { message: /not a slave of the current thread/ });
 
-    Stage.switchThread(root);
-    Stage.joinSync(b);
-    Stage.joinSync(a);
+    Stage.sw1tch(root);
+    Stage.joinSync(b, noopJoined);
+    Stage.joinSync(a, noopJoined);
 });
 
 test('Stage.joinSync rejects running slave thread', async (t) => {
     const p = Stage.fork('busy', async () => {
         await new globalThis.Promise<void>((resolve) => setTimeout(resolve, 20));
         return 1;
-    });
+    }, noopForked);
 
-    t.throws(() => Stage.joinSync(p.thread), { message: /still running/ });
+    t.throws(() => Stage.joinSync(p.thread, noopJoined), { message: /still running/ });
     await p;
-    await Stage.join(p);
+    await Stage.join(p, noopJoined);
 });
 
 test('Stage.fork clears running state when callback throws synchronously', async (t) => {
@@ -409,38 +469,38 @@ test('Stage.fork clears running state when callback throws synchronously', async
     const boom = new Error('boom-sync');
     const p = Stage.fork('sync-throw', () => {
         throw boom;
-    });
+    }, noopForked);
 
     const thrown = await t.throwsAsync(async () => await p);
     t.is(thrown, boom);
     t.false(p.thread.running);
     t.true(master.slaves.has(p.thread));
 
-    const joinThrown = await t.throwsAsync(async () => await Stage.join(p));
+    const joinThrown = await t.throwsAsync(async () => await Stage.join(p, noopJoined));
     t.is(joinThrown, boom);
     t.false(master.slaves.has(p.thread));
 });
 
 test('Stage.joinSync rejects slave that still has child threads', (t) => {
     const root = Stage.getThread();
-    const parent = Stage.forkSync('parent');
-    Stage.switchThread(parent);
-    const child = Stage.forkSync('child');
-    Stage.switchThread(root);
+    const parent = Stage.forkSync('parent', noopForked);
+    Stage.sw1tch(parent);
+    const child = Stage.forkSync('child', noopForked);
+    Stage.sw1tch(root);
 
-    t.throws(() => Stage.joinSync(parent), { message: /has its own slave threads/ });
+    t.throws(() => Stage.joinSync(parent, noopJoined), { message: /has its own slave threads/ });
 
-    Stage.switchThread(parent);
-    Stage.joinSync(child);
-    Stage.switchThread(root);
-    Stage.joinSync(parent);
+    Stage.sw1tch(parent);
+    Stage.joinSync(child, noopJoined);
+    Stage.sw1tch(root);
+    Stage.joinSync(parent, noopJoined);
 });
 
 test('Stage.joinSync rejects repeated joins after detachment', (t) => {
-    const slave = Stage.forkSync('once-only');
-    Stage.joinSync(slave);
+    const slave = Stage.forkSync('once-only', noopForked);
+    Stage.joinSync(slave, noopJoined);
 
-    t.throws(() => Stage.joinSync(slave), { message: /not a slave of the current thread/ });
+    t.throws(() => Stage.joinSync(slave, noopJoined), { message: /not a slave of the current thread/ });
 });
 
 test('Stage.forkjoin composes fork and join listeners', async (t) => {

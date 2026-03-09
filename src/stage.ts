@@ -52,7 +52,7 @@ export class Promise<T> extends globalThis.Promise<T> {
 
 export function forkSync(
     name: string,
-    listener?: (slave: Thread) => void,
+    forked: (slave: Thread) => void,
 ): Thread {
     const master = getThread();
     const slave: Thread = {
@@ -63,15 +63,15 @@ export function forkSync(
         running: false,
     };
     master.slaves.add(slave);
-    listener?.(slave);
+    forked(slave);
     return slave;
 }
 export function fork<T>(
     name: string,
     fn: () => globalThis.Promise<T>,
-    listener?: (slave: Thread) => void,
+    forked: (slave: Thread) => void,
 ): Promise<T> {
-    const slave = forkSync(name, listener);
+    const slave = forkSync(name, forked);
     slave.running = true;
     return Promise.transform(
         als.run({ thread: slave }, async () => await fn())
@@ -81,38 +81,38 @@ export function fork<T>(
 }
 
 
-export function switchThread(thread: Thread): Thread {
+export function sw1tch(thread: Thread): void {
     if (thread.running) throw new Error(`Thread ${thread.name} is already occupied.`);
     const current = getThread();
     current.running = false;
     setThread(thread);
     thread.running = true;
-    return current;
 }
 
 export function joinSync(
     slave: Thread,
-    listener?: (slave: Thread) => void,
+    joined: (slave: Thread, e?: unknown) => void,
+    e?: unknown,
 ): void {
     if (slave.slaves.size) throw new Error(`Thread ${slave.name} has its own slave threads.`);
     if (slave.running) throw new Error(`Thread ${slave.name} is still running.`);
     const master = getThread();
     if (!master.slaves.has(slave)) throw new Error(`Thread ${slave.name} is not a slave of the current thread ${master.name}.`);
-    listener?.(slave);
+    joined(slave, e);
     master.slaves.delete(slave);
 }
-export function join<T>(
+export async function join<T>(
     promise: Promise<T>,
-    listener?: (slave: Thread) => void,
+    joined: (slave: Thread, e?: unknown) => void,
 ): globalThis.Promise<T> {
-    return promise.finally(() => joinSync(promise.thread, listener));
+    return promise.finally(() => joinSync(promise.thread, joined));
 }
 
 export function forkjoin<T>(
     name: string,
     fn: () => globalThis.Promise<T>,
-    forkListener?: (slave: Thread) => void,
-    joinListener?: (slave: Thread) => void,
+    forked: (slave: Thread) => void,
+    joined: (slave: Thread, e?: unknown) => void,
 ): globalThis.Promise<T> {
-    return join(fork(name, fn, forkListener), joinListener);
+    return join(fork(name, fn, forked), joined);
 }
