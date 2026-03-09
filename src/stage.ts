@@ -66,9 +66,12 @@ export function forkSync(
     forked(slave);
     return slave;
 }
+/**
+ * @param fn is allowed to throw synchronously.
+ */
 export function fork<T>(
     name: string,
-    fn: () => globalThis.Promise<T>,
+    fn: () => PromiseLike<T>,
     forked: (slave: Thread) => void,
 ): Promise<T> {
     const slave = forkSync(name, forked);
@@ -108,9 +111,12 @@ export async function join<T>(
     return promise.finally(() => joinSync(promise.thread, joined));
 }
 
+/**
+ * @param fn is allowed to throw synchronously.
+ */
 export function forkjoin<T>(
     name: string,
-    fn: () => globalThis.Promise<T>,
+    fn: () => PromiseLike<T>,
     forked: (slave: Thread) => void,
     joined: (slave: Thread, e?: unknown) => void,
 ): globalThis.Promise<T> {

@@ -481,6 +481,31 @@ test('Stage.fork clears running state when callback throws synchronously', async
     t.false(master.slaves.has(p.thread));
 });
 
+test('Stage.forkjoin forwards synchronous throw from fn and detaches slave', async (t) => {
+    const master = Stage.getThread();
+    let seenSlave: Stage.Thread | undefined;
+    let seenError: unknown;
+    const boom = new Error('boom-forkjoin-sync');
+
+    const thrown = await t.throwsAsync(async () => await Stage.forkjoin(
+        'forkjoin-sync-throw',
+        () => {
+            throw boom;
+        },
+        noopForked,
+        (slave, e) => {
+            seenSlave = slave;
+            seenError = e;
+        },
+    ));
+
+    t.is(thrown, boom);
+    t.is(seenError, undefined);
+    t.is(seenSlave?.name, 'forkjoin-sync-throw');
+    t.false(seenSlave?.running ?? true);
+    t.false(master.slaves.has(seenSlave!));
+});
+
 test('Stage.joinSync rejects slave that still has child threads', (t) => {
     const root = Stage.getThread();
     const parent = Stage.forkSync('parent', noopForked);
