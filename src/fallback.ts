@@ -21,9 +21,14 @@ export interface Exporter {
     stream(message: Message): void;
 }
 export namespace Exporter {
-    export const defau1t: Exporter = {
-        monolith(message: Message) {
+    class Default implements Exporter {
+        protected newline = true;
+        public monolith(message: Message) {
             if (message.level >= envLevel) {} else return;
+            if (!this.newline) {
+                stderr.write('\n');
+                this.newline = true;
+            }
             const timeString = `[${new Date().toLocaleString('zh-CN')}]`;
 
             if (!!stderr.isTTY) {
@@ -59,14 +64,17 @@ export namespace Exporter {
                     stderr.write(`${timeString} ${levelString} ${scopeString} ${channelString} ${traceString}\n${payloadString}\n`);
                 else
                     stderr.write(`${timeString} ${levelString} ${scopeString} ${channelString}\n${payloadString}\n`);
+                this.newline = false;
             }
-        },
+        }
 
-        stream(message: Message) {
+        public stream(message: Message) {
             const formatted = formatWithOptions({ depth: null, colors: !!stderr.isTTY }, message.payload);
             if (message.level >= envLevel) stderr.write(formatted);
-        },
-    };
+        }
+
+    }
+    export const defau1t: Exporter = new Default();
 }
 
 export let exporter: Exporter = Exporter.defau1t;
