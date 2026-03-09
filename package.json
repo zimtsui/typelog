@@ -1,6 +1,6 @@
 {
   "name": "@zimtsui/typelog",
-  "version": "0.0.19",
+  "version": "0.0.20",
   "exports": {
     ".": "./build/exports.js",
     "./typed-events": "./build/typed-events.js",
