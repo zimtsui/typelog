@@ -74,7 +74,7 @@ export function fork<T>(
     const slave = forkSync(name, listener);
     slave.running = true;
     return Promise.transform(
-        als.run({ thread: slave }, fn)
+        als.run({ thread: slave }, async () => await fn())
             .finally(() => void (slave.running = false)),
         slave,
     );
@@ -97,7 +97,7 @@ export function joinSync(
     if (slave.slaves.size) throw new Error(`Thread ${slave.name} has its own slave threads.`);
     if (slave.running) throw new Error(`Thread ${slave.name} is still running.`);
     const master = getThread();
-    if (slave.master !== master) throw new Error(`Thread ${slave.name} is not a slave of the current thread ${master.name}.`);
+    if (!master.slaves.has(slave)) throw new Error(`Thread ${slave.name} is not a slave of the current thread ${master.name}.`);
     listener?.(slave);
     master.slaves.delete(slave);
 }
