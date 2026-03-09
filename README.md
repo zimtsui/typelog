@@ -159,4 +159,31 @@ async function f1(x: number) {
 async function f2(x: number) {
     return String(x);
 }
+
+console.log(await f3(100));
+```
+
+## OpenTelemetry Log Fallback
+
+For the moment at March 2026, [OpenTelemetry Node.js SDK has no stable release yet.](https://opentelemetry.io/docs/languages/)
+
+A simple console exporter is provided for workaround.
+
+```ts
+import { exporter } from '@zimtsui/typelog/fallback';
+import * as Presets from '@zimtsui/typelog/presets';
+
+exporter.monolith({
+    level: Presets.Level.info,
+    scope: 'Example',
+    channel: 'Default',
+    payload: 'Hello, world!',
+});
+
+exporter.stream({
+    level: Presets.Level.info,
+    scope: 'Example',
+    channel: 'Default',
+    payload: 'Hello, world!',
+});
 ```

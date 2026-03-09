@@ -29,3 +29,5 @@ async function f1(x: number) {
 async function f2(x: number) {
     return String(x);
 }
+
+console.log(await f3(100));
