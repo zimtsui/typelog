@@ -8,14 +8,14 @@ let count = 0;
 
 export interface Thread {
     name: string;
-    threadId: number;
+    id: number;
     master: Thread | null;
     slaves: Set<Thread>;
     running: boolean;
 }
 const rootThread: Thread = {
     name: 'root',
-    threadId: ++count,
+    id: ++count,
     master: null,
     slaves: new Set<Thread>(),
     running: true,
@@ -57,7 +57,7 @@ export function forkSync(
     const master = getThread();
     const slave: Thread = {
         name,
-        threadId: ++count,
+        id: ++count,
         master,
         slaves: new Set<Thread>(),
         running: false,
