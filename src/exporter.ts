@@ -17,7 +17,13 @@ export namespace Exporter {
         public monolith() {}
         public stream() {}
     }
-    export const defau1t: Exporter = new Default();
-}
+    let exporter: Exporter = new Default();
 
-export let exporter: Exporter = Exporter.defau1t;
+    export function setGlobalExporter(newExporter: Exporter) {
+        exporter = newExporter;
+    }
+
+    export function getGlobalExporter(): Exporter {
+        return exporter;
+    }
+}
