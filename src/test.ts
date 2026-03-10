@@ -359,7 +359,7 @@ test('Tracer decorators preserve method names, this binding and configured span 
 			return this.base + delta;
 		}
 
-		@tracer.SpawnedAsync('custom-async')
+		@tracer.spawnedAsync('custom-async')
 		public async addAsync(delta: number) {
 			return this.base + delta;
 		}

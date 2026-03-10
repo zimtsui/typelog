@@ -94,7 +94,7 @@ export namespace Tracer {
                 descriptor.value = activeMethod;
             }
         }
-        public SpawnedSync<R>(name?: string) {
+        public spawnedSync<R>(name?: string) {
             return (target: any, propertyKey: string, descriptor: TypedPropertyDescriptor<(this: any, ...args: any[]) => R>) => {
                 const that = this;
                 const originalMethod = descriptor.value!;
@@ -106,7 +106,7 @@ export namespace Tracer {
                 descriptor.value = activeMethod;
             }
         }
-        public SpawnedAsync<R>(name?: string) {
+        public spawnedAsync<R>(name?: string) {
             return (target: any, propertyKey: string, descriptor: TypedPropertyDescriptor<(this: any, ...args: any[]) => Promise<R>>) => {
                 const that = this;
                 const originalMethod = descriptor.value!;
