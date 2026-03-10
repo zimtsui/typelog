@@ -5,7 +5,8 @@
     ".": "./build/exports.js",
     "./typed-events": "./build/typed-events.js",
     "./presets": "./build/presets.js",
-    "./tracer": "./build/trace.js"
+    "./trace": "./build/trace.js",
+    "./exporter": "./build/exporter.js"
   },
   "description": "",
   "type": "module",
