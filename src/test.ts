@@ -1,553 +1,374 @@
-import test from 'ava';
+import test, { type ExecutionContext } from 'ava';
 import * as OTEL from '@opentelemetry/api';
-import { formatWithOptions } from 'node:util';
-import { stderr } from 'node:process';
 import { Channel } from './channel.ts';
-import * as Fallback from './fallback.ts';
-import { LogEvent, type LogEventTarget } from './log-events.ts';
+import { LogEvent } from './log-events.ts';
 import { Level, envlevels } from './presets.ts';
-import * as Stage from './stage.ts';
-import { Tracer } from './tracer.ts';
+import { Tracer } from './trace.ts';
 
-const noopForked = (_slave: Stage.Thread) => {};
-const noopJoined = (_slave: Stage.Thread, _e?: unknown) => {};
+function withMockOtel(t: ExecutionContext) {
+	const originalGetTracer = OTEL.trace.getTracer;
+	const originalSetSpan = OTEL.trace.setSpan;
+	const originalContextWith = OTEL.context.with;
+	const originalContextActive = OTEL.context.active;
+
+	t.teardown(() => {
+		OTEL.trace.getTracer = originalGetTracer;
+		OTEL.trace.setSpan = originalSetSpan;
+		OTEL.context.with = originalContextWith;
+		OTEL.context.active = originalContextActive;
+	});
+}
+
+function runWithMockContext<A extends unknown[], R>(
+	_context: OTEL.Context,
+	fn: (...args: A) => R,
+	thisArg?: ThisParameterType<typeof fn>,
+	...args: A
+): R {
+	return fn.apply(thisArg, args);
+}
 
 test('Channel.create forwards message and level', (t) => {
-    enum LevelLocal {
-        trace,
-        info,
-    }
-    const seen: Array<[string, LevelLocal]> = [];
-    const channel = Channel.create<typeof LevelLocal, string>(
-        LevelLocal,
-        (message, level) => {
-            seen.push([message, level]);
-        },
-    );
+	enum TestLevel {
+		trace,
+		info,
+	}
 
-    channel.trace('hello');
-    channel.info('world');
+	const seen: Array<[string, TestLevel]> = [];
+	const channel = Channel.create(TestLevel, (message: string, level) => {
+		seen.push([message, level]);
+	});
 
-    t.deepEqual(seen, [
-        ['hello', LevelLocal.trace],
-        ['world', LevelLocal.info],
-    ]);
+	channel.trace('hello');
+	channel.info('world');
+
+	t.deepEqual(seen, [
+		['hello', TestLevel.trace],
+		['world', TestLevel.info],
+	]);
 });
 
 test('Channel.create skips handler when signal is aborted', (t) => {
-    enum LevelLocal {
-        trace,
-    }
-    const controller = new AbortController();
-    let called = 0;
-    const channel = Channel.create<typeof LevelLocal, string>(
-        LevelLocal,
-        () => {
-            called += 1;
-        },
-        controller.signal,
-    );
+	enum TestLevel {
+		trace,
+	}
 
-    controller.abort();
-    channel.trace('hello');
+	const controller = new AbortController();
+	let called = 0;
+	const channel = Channel.create(TestLevel, () => {
+		called += 1;
+	}, controller.signal);
 
-    t.is(called, 0);
+	controller.abort();
+	channel.trace('ignored');
+
+	t.is(called, 0);
 });
 
 test('Channel.create throws on unknown level access', (t) => {
-    enum LevelLocal {
-        trace,
-        info,
-    }
-    const channel = Channel.create<typeof LevelLocal, string>(LevelLocal, () => {});
+	enum TestLevel {
+		trace,
+	}
 
-    t.throws(() => (channel as any).oops('x'), { instanceOf: Error });
+	const channel = Channel.create(TestLevel, () => {});
+
+	t.throws(() => {
+		const unknownLevel = (channel as unknown as Record<string, unknown>).oops as (message: string) => void;
+		return unknownLevel('x');
+	}, {
+		instanceOf: Error,
+	});
 });
 
-test('Channel.attach dispatches LogEvent with level and detail', (t) => {
-    type MyMap = {
-        log: [typeof Level, number];
-    };
-    const eventTarget = new EventTarget() as LogEventTarget<MyMap>;
-    const channel = Channel.attach(eventTarget, 'log', Level);
+test('Channel.transport forwards messages until aborted', (t) => {
+	const controller = new AbortController();
+	const seen: string[] = [];
+	const transport = Channel.transport<string>((message) => {
+		seen.push(message);
+	}, controller.signal);
 
-    let received: LogEvent<'log', typeof Level, number> | undefined;
-    eventTarget.addEventListener('log', (evt) => {
-        received = evt;
-    });
+	transport('before');
+	controller.abort();
+	transport('after');
 
-    channel.warn(42);
-
-    t.truthy(received);
-    t.is(received?.type, 'log');
-    t.is(received?.level, Level.warn);
-    t.is(received?.detail, 42);
+	t.deepEqual(seen, ['before']);
 });
 
-test('Channel.attach skips dispatch once signal is aborted', (t) => {
-    type MyMap = {
-        log: [typeof Level, number];
-    };
-    const controller = new AbortController();
-    const eventTarget = new EventTarget() as LogEventTarget<MyMap>;
-    const channel = Channel.attach(eventTarget, 'log', Level, controller.signal);
-    let received = 0;
-    eventTarget.addEventListener('log', () => {
-        received += 1;
-    });
+test('Channel.attach dispatches LogEvent with type, level and detail', (t) => {
+	const eventTarget = new EventTarget();
+	const channel = Channel.attach(eventTarget, 'log', Level) as {
+		warn: (message: number) => boolean;
+	};
+	let received: LogEvent<'log', typeof Level, number> | undefined;
 
-    controller.abort();
-    const result = channel.warn(42);
+	eventTarget.addEventListener('log', (event) => {
+		received = event as LogEvent<'log', typeof Level, number>;
+	});
 
-    t.is(received, 0);
-    t.not(result, false);
+	const result = channel.warn(42);
+
+	t.true(result);
+	t.truthy(received);
+	t.is(received?.type, 'log');
+	t.is(received?.level, Level.warn);
+	t.is(received?.detail, 42);
 });
 
-test('Channel.transport forwards message unless aborted', (t) => {
-    const controller = new AbortController();
-    const seen: string[] = [];
-    const transport = Channel.transport<string>((message) => {
-        seen.push(message);
-    }, controller.signal);
+test('Channel.attach skips dispatch when signal is aborted', (t) => {
+	const controller = new AbortController();
+	const eventTarget = new EventTarget();
+	const channel = Channel.attach(eventTarget, 'log', Level, controller.signal) as {
+		error: (message: string) => boolean;
+	};
+	let received = 0;
 
-    transport('before');
-    controller.abort();
-    transport('after');
+	eventTarget.addEventListener('log', () => {
+		received += 1;
+	});
 
-    t.deepEqual(seen, ['before']);
+	controller.abort();
+	const result = channel.error('ignored');
+
+	t.is(received, 0);
+	t.true(result);
 });
 
-test('LogEvent stores type, level and detail', (t) => {
-    const payload = { value: 123 };
-    const evt = new LogEvent('evt', Level.info, payload);
+test('LogEvent stores event metadata on the instance', (t) => {
+	const payload = { answer: 42 };
+	const event = new LogEvent('message', Level.info, payload);
 
-    t.is(evt.type, 'evt');
-    t.is(evt.level, Level.info);
-    t.deepEqual(evt.detail, payload);
+	t.is(event.type, 'message');
+	t.is(event.level, Level.info);
+	t.deepEqual(event.detail, payload);
 });
 
-test('presets.envlevels maps environments to expected levels', (t) => {
-    t.is(envlevels.debug, Level.trace);
-    t.is(envlevels.development, Level.debug);
-    t.is(envlevels.production, Level.warn);
+test('presets.envlevels expose documented defaults', (t) => {
+	t.is(envlevels.debug, Level.trace);
+	t.is(envlevels.development, Level.debug);
+	t.is(envlevels.production, Level.warn);
 });
 
-test('fallback.exporter defaults to Exporter.defau1t', (t) => {
-    t.is(Fallback.exporter, Fallback.Exporter.defau1t);
+test('Tracer.create requests OTEL tracer with scope and version', (t) => {
+	withMockOtel(t);
+
+	const calls: Array<[string, string | undefined]> = [];
+	OTEL.trace.getTracer = (scope, version) => {
+		calls.push([scope, version]);
+		return { startSpan() { throw new Error('unused'); } } as unknown as OTEL.Tracer;
+	};
+
+	Tracer.create('scope', '1.2.3');
+
+	t.deepEqual(calls, [['scope', '1.2.3']]);
 });
 
-test('fallback default stream writes formatted payload when level passes threshold', (t) => {
-    const originalWrite = stderr.write;
-    const writes: string[] = [];
-    (stderr as any).write = (chunk: unknown) => {
-        writes.push(String(chunk));
-        return true;
-    };
-    t.teardown(() => {
-        (stderr as any).write = originalWrite;
-    });
+test('Tracer.forkSync runs inside active context and ends the span', (t) => {
+	withMockOtel(t);
 
-    const payload = { answer: 42 };
-    Fallback.Exporter.defau1t.stream({ scope: 'svc.auth', channel: 'main', payload, level: Level.info });
+	const masterContext = { name: 'active' } as unknown as OTEL.Context;
+	const slaveContext = { name: 'slave' } as unknown as OTEL.Context;
+	const seen: string[] = [];
+	const span = {
+		recordException() {},
+		setStatus() {},
+		end() {
+			seen.push('end');
+		},
+	} as unknown as OTEL.Span;
 
-    t.is(writes.length, 1);
-    t.is(writes[0], formatWithOptions({ depth: null, colors: !!stderr.isTTY }, payload));
+	OTEL.context.active = () => masterContext;
+	OTEL.trace.getTracer = () => ({
+		startSpan(name, _options, context) {
+			seen.push(`start:${name}`);
+			t.is(context, masterContext);
+			return span;
+		},
+	} as OTEL.Tracer);
+	OTEL.trace.setSpan = (context, currentSpan) => {
+		seen.push('setSpan');
+		t.is(context, masterContext);
+		t.is(currentSpan, span);
+		return slaveContext;
+	};
+	OTEL.context.with = (context, fn, thisArg, ...args) => {
+		seen.push('with');
+		t.is(context, slaveContext);
+		return runWithMockContext(context, fn, thisArg, ...args);
+	};
+
+	const tracer = Tracer.create('scope');
+	const result = tracer.forkSync('sync-op', () => {
+		seen.push('body');
+		return 42;
+	});
+
+	t.is(result, 42);
+	t.deepEqual(seen, ['start:sync-op', 'setSpan', 'with', 'body', 'end']);
 });
 
-test('fallback default stream skips output when level is below threshold', (t) => {
-    const originalWrite = stderr.write;
-    let writes = 0;
-    (stderr as any).write = () => {
-        writes += 1;
-        return true;
-    };
-    t.teardown(() => {
-        (stderr as any).write = originalWrite;
-    });
+test('Tracer.spawnSync records errors, marks span and rethrows', (t) => {
+	withMockOtel(t);
 
-    Fallback.Exporter.defau1t.stream({ scope: 'svc.auth', channel: 'main', payload: 'trace-data', level: Level.trace });
+	const statuses: OTEL.SpanStatus[] = [];
+	const errors: unknown[] = [];
+	const span = {
+		recordException(error: unknown) {
+			errors.push(error);
+		},
+		setStatus(status: OTEL.SpanStatus) {
+			statuses.push(status);
+		},
+		end() {},
+	} as unknown as OTEL.Span;
 
-    t.is(writes, 0);
+	OTEL.trace.getTracer = () => ({
+		startSpan() {
+			return span;
+		},
+	} as unknown as OTEL.Tracer);
+	OTEL.trace.setSpan = (context) => context;
+	OTEL.context.with = (_context, fn, thisArg, ...args) => runWithMockContext(_context, fn, thisArg, ...args);
+
+	const tracer = Tracer.create('scope');
+	const boom = new Error('boom');
+
+	const thrown = t.throws(() => tracer.spawnSync('sync-op', () => {
+		throw boom;
+	}));
+
+	t.is(thrown, boom);
+	t.is(errors[0], boom);
+	t.deepEqual(statuses, [{ code: OTEL.SpanStatusCode.ERROR }]);
 });
 
-test('fallback default monolith writes scope and channel in header', (t) => {
-    const originalWrite = stderr.write;
-    const originalGetActiveSpan = OTEL.trace.getActiveSpan;
-    const writes: string[] = [];
-    (stderr as any).write = (chunk: unknown) => {
-        writes.push(String(chunk));
-        return true;
-    };
-    (OTEL.trace as any).getActiveSpan = () => undefined;
-    t.teardown(() => {
-        (stderr as any).write = originalWrite;
-        (OTEL.trace as any).getActiveSpan = originalGetActiveSpan;
-    });
+test('Tracer.forkAsync waits for the promise before ending the span', async (t) => {
+	withMockOtel(t);
 
-    Fallback.Exporter.defau1t.monolith({
-        scope: 'svc.billing',
-        channel: 'orders',
-        payload: { id: 7 },
-        level: Level.info,
-    });
+	const masterContext = { name: 'active' } as unknown as OTEL.Context;
+	const slaveContext = { name: 'slave' } as unknown as OTEL.Context;
+	const seen: string[] = [];
+	let resolveWork: ((value: number) => void) | undefined;
+	const work = new Promise<number>((resolve) => {
+		resolveWork = resolve;
+	});
 
-    t.is(writes.length, 1);
-    const output = writes[0];
-    if (output === undefined) {
-        t.fail('expected monolith output');
-        return;
-    }
-    t.true(output.includes('svc.billing'));
-    t.true(output.includes('orders'));
-    t.true(output.includes('{ id: 7 }'));
+	const span = {
+		recordException() {},
+		setStatus() {},
+		end() {
+			seen.push('end');
+		},
+	} as unknown as OTEL.Span;
+
+	OTEL.context.active = () => masterContext;
+	OTEL.trace.getTracer = () => ({
+		startSpan(name, _options, context) {
+			seen.push(`start:${name}`);
+			t.is(context, masterContext);
+			return span;
+		},
+	} as OTEL.Tracer);
+	OTEL.trace.setSpan = (context, currentSpan) => {
+		seen.push('setSpan');
+		t.is(context, masterContext);
+		t.is(currentSpan, span);
+		return slaveContext;
+	};
+	OTEL.context.with = (context, fn, thisArg, ...args) => {
+		seen.push('with');
+		t.is(context, slaveContext);
+		return runWithMockContext(context, fn, thisArg, ...args);
+	};
+
+	const tracer = Tracer.create('scope');
+	const pending = tracer.forkAsync('async-op', async () => {
+		seen.push('body');
+		return await work;
+	});
+
+	await Promise.resolve();
+	t.deepEqual(seen, ['start:async-op', 'setSpan', 'with', 'body']);
+
+	resolveWork!(7);
+	t.is(await pending, 7);
+	t.deepEqual(seen, ['start:async-op', 'setSpan', 'with', 'body', 'end']);
 });
 
-test('Tracer.create forwards scope and version to OTEL.trace.getTracer', (t) => {
-    const originalGetTracer = OTEL.trace.getTracer;
-    t.teardown(() => {
-        (OTEL.trace as any).getTracer = originalGetTracer;
-    });
+test('Tracer.spawnAsync records async rejections, marks span and rethrows', async (t) => {
+	withMockOtel(t);
 
-    const fakeTracer = {
-        startActiveSpan: () => {
-            throw new Error('not expected in this test');
-        },
-    };
-    const calls: Array<[string, string | undefined]> = [];
-    (OTEL.trace as any).getTracer = (scope: string, version?: string) => {
-        calls.push([scope, version]);
-        return fakeTracer;
-    };
+	const statuses: OTEL.SpanStatus[] = [];
+	const errors: unknown[] = [];
+	const span = {
+		recordException(error: unknown) {
+			errors.push(error);
+		},
+		setStatus(status: OTEL.SpanStatus) {
+			statuses.push(status);
+		},
+		end() {},
+	} as unknown as OTEL.Span;
 
-    Tracer.create('my-scope', '1.2.3');
+	OTEL.trace.getTracer = () => ({
+		startSpan() {
+			return span;
+		},
+	} as unknown as OTEL.Tracer);
+	OTEL.trace.setSpan = (context) => context;
+	OTEL.context.with = (_context, fn, thisArg, ...args) => runWithMockContext(_context, fn, thisArg, ...args);
 
-    t.deepEqual(calls, [['my-scope', '1.2.3']]);
+	const tracer = Tracer.create('scope');
+	const boom = new Error('boom-async');
+
+	const thrown = await t.throwsAsync(async () => tracer.spawnAsync('async-op', async () => {
+		throw boom;
+	}));
+
+	t.is(thrown, boom);
+	t.is(errors[0], boom);
+	t.deepEqual(statuses, [{ code: OTEL.SpanStatusCode.ERROR }]);
 });
 
-test('Tracer.activateSync returns result and ends span', (t) => {
-    const originalGetTracer = OTEL.trace.getTracer;
-    t.teardown(() => {
-        (OTEL.trace as any).getTracer = originalGetTracer;
-    });
+test('Tracer decorators preserve method names, this binding and configured span names', async (t) => {
+	withMockOtel(t);
 
-    let spanEnded = 0;
-    const span = {
-        recordException: () => {},
-        setStatus: () => {},
-        end: () => {
-            spanEnded += 1;
-        },
-    };
-    const names: string[] = [];
-    (OTEL.trace as any).getTracer = () => ({
-        startActiveSpan: (name: string, fn: (span: any) => number) => {
-            names.push(name);
-            return fn(span);
-        },
-    });
+	const spanNames: string[] = [];
+	const span = {
+		recordException() {},
+		setStatus() {},
+		end() {},
+	} as unknown as OTEL.Span;
 
-    const tracer = Tracer.create('scope');
-    const result = tracer.activateSync('sync-op', () => 42);
+	OTEL.trace.getTracer = () => ({
+		startSpan(name: string) {
+			spanNames.push(name);
+			return span;
+		},
+	} as unknown as OTEL.Tracer);
+	OTEL.trace.setSpan = (context) => context;
+	OTEL.context.with = (_context, fn, thisArg, ...args) => runWithMockContext(_context, fn, thisArg, ...args);
+	OTEL.context.active = () => OTEL.ROOT_CONTEXT;
 
-    t.is(result, 42);
-    t.deepEqual(names, ['sync-op']);
-    t.is(spanEnded, 1);
-});
+	const tracer = Tracer.create('scope');
 
-test('Tracer.activateSync records Error, sets status and rethrows', (t) => {
-    const originalGetTracer = OTEL.trace.getTracer;
-    t.teardown(() => {
-        (OTEL.trace as any).getTracer = originalGetTracer;
-    });
+	class Demo {
+		public constructor(private readonly base: number) {}
 
-    const statuses: Array<{ code: OTEL.SpanStatusCode }> = [];
-    const errors: Error[] = [];
-    let spanEnded = 0;
-    const span = {
-        recordException: (error: Error) => {
-            errors.push(error);
-        },
-        setStatus: (status: { code: OTEL.SpanStatusCode }) => {
-            statuses.push(status);
-        },
-        end: () => {
-            spanEnded += 1;
-        },
-    };
-    (OTEL.trace as any).getTracer = () => ({
-        startActiveSpan: (_name: string, fn: (span: any) => unknown) => fn(span),
-    });
+		@tracer.forkedSync()
+		public add(delta: number) {
+			return this.base + delta;
+		}
 
-    const tracer = Tracer.create('scope');
-    const boom = new Error('boom');
-    const thrown = t.throws(() => tracer.activateSync('sync-op', () => {
-        throw boom;
-    }));
+		@tracer.SpawnedAsync('custom-async')
+		public async addAsync(delta: number) {
+			return this.base + delta;
+		}
+	}
 
-    t.is(thrown, boom);
-    t.is(errors[0], boom);
-    t.deepEqual(statuses, [{ code: OTEL.SpanStatusCode.ERROR }]);
-    t.is(spanEnded, 1);
-});
+	const demo = new Demo(10);
 
-test('Tracer.activateAsync records Error, sets status and rethrows', async (t) => {
-    const originalGetTracer = OTEL.trace.getTracer;
-    t.teardown(() => {
-        (OTEL.trace as any).getTracer = originalGetTracer;
-    });
-
-    const statuses: Array<{ code: OTEL.SpanStatusCode }> = [];
-    const errors: Error[] = [];
-    let spanEnded = 0;
-    const span = {
-        recordException: (error: Error) => {
-            errors.push(error);
-        },
-        setStatus: (status: { code: OTEL.SpanStatusCode }) => {
-            statuses.push(status);
-        },
-        end: () => {
-            spanEnded += 1;
-        },
-    };
-    (OTEL.trace as any).getTracer = () => ({
-        startActiveSpan: (_name: string, fn: (span: any) => Promise<unknown>) => fn(span),
-    });
-
-    const tracer = Tracer.create('scope');
-    const boom = new Error('boom-async');
-    const thrown = await t.throwsAsync(async () => tracer.activateAsync('async-op', async () => {
-        throw boom;
-    }));
-
-    t.is(thrown, boom);
-    t.is(errors[0], boom);
-    t.deepEqual(statuses, [{ code: OTEL.SpanStatusCode.ERROR }]);
-    t.is(spanEnded, 1);
-});
-
-test('Tracer decorators use names and preserve this binding', async (t) => {
-    const originalGetTracer = OTEL.trace.getTracer;
-    t.teardown(() => {
-        (OTEL.trace as any).getTracer = originalGetTracer;
-    });
-
-    const spanNames: string[] = [];
-    const span = {
-        recordException: () => {},
-        setStatus: () => {},
-        end: () => {},
-    };
-    (OTEL.trace as any).getTracer = () => ({
-        startActiveSpan: (name: string, fn: (span: any) => unknown) => {
-            spanNames.push(name);
-            return fn(span);
-        },
-    });
-
-    const tracer = Tracer.create('scope');
-    class Demo {
-        public constructor(private readonly base: number) {}
-        @tracer.activeSync()
-        public add(n: number) {
-            return this.base + n;
-        }
-        @tracer.activeAsync('custom-async')
-        public async addAsync(n: number) {
-            return this.base + n;
-        }
-    }
-    const demo = new Demo(10);
-
-    t.is(demo.add(2), 12);
-    t.is(await demo.addAsync(5), 15);
-    t.deepEqual(spanNames, ['add', 'custom-async']);
-});
-
-test('Stage.getThread starts from a running root thread', (t) => {
-    const root = Stage.getThread();
-
-    t.is(root.name, 'root');
-    t.is(root.master, null);
-    t.true(root.running);
-});
-
-test('Stage.forkSync creates non-running slave under current thread', (t) => {
-    const master = Stage.getThread();
-    let seen: Stage.Thread | undefined;
-    const slave = Stage.forkSync('sync-child', (thread) => {
-        seen = thread;
-    });
-
-    t.is(seen, slave);
-    t.is(slave.name, 'sync-child');
-    t.is(slave.master, master);
-    t.false(slave.running);
-    t.true(master.slaves.has(slave));
-
-    Stage.joinSync(slave, noopJoined);
-    t.false(master.slaves.has(slave));
-});
-
-test('Stage.fork returns Stage.Promise and runs callback in spawned thread', async (t) => {
-    const master = Stage.getThread();
-    let inside: Stage.Thread | undefined;
-    let forked: Stage.Thread | undefined;
-    const p = Stage.fork('job', async () => {
-        inside = Stage.getThread();
-        return 'ok';
-    }, (thread) => {
-        forked = thread;
-    });
-
-    t.true(p instanceof Stage.Promise);
-    t.is(p.thread.name, 'job');
-    t.is(forked, p.thread);
-    t.is(await p, 'ok');
-    t.is(inside, p.thread);
-    t.false(p.thread.running);
-
-    await Stage.join(p, noopJoined);
-    t.false(master.slaves.has(p.thread));
-});
-
-test('Stage.join resolves original value and detaches slave from master', async (t) => {
-    const master = Stage.getThread();
-    let seenSlave: Stage.Thread | undefined;
-
-    const p = Stage.fork('join-job', async () => 7, noopForked);
-    const result = await Stage.join(p, (slave) => {
-        seenSlave = slave;
-    });
-
-    t.is(result, 7);
-    t.is(seenSlave, p.thread);
-    t.false(master.slaves.has(p.thread));
-});
-
-test('Stage.sw1tch swaps running states and rejects occupied target', (t) => {
-    const current = Stage.getThread();
-    t.throws(() => Stage.sw1tch(current), { message: /already occupied/ });
-
-    const slave = Stage.forkSync('switch-target', noopForked);
-    const result = Stage.sw1tch(slave);
-    t.is(result, undefined);
-    t.is(Stage.getThread(), slave);
-    t.true(slave.running);
-    t.false(current.running);
-
-    Stage.sw1tch(current);
-    Stage.joinSync(slave, noopJoined);
-});
-
-test('Stage.joinSync rejects joining from non-master thread', (t) => {
-    const root = Stage.getThread();
-    const a = Stage.forkSync('a', noopForked);
-    const b = Stage.forkSync('b', noopForked);
-    Stage.sw1tch(b);
-
-    t.throws(() => Stage.joinSync(a, noopJoined), { message: /not a slave of the current thread/ });
-
-    Stage.sw1tch(root);
-    Stage.joinSync(b, noopJoined);
-    Stage.joinSync(a, noopJoined);
-});
-
-test('Stage.joinSync rejects running slave thread', async (t) => {
-    const p = Stage.fork('busy', async () => {
-        await new globalThis.Promise<void>((resolve) => setTimeout(resolve, 20));
-        return 1;
-    }, noopForked);
-
-    t.throws(() => Stage.joinSync(p.thread, noopJoined), { message: /still running/ });
-    await p;
-    await Stage.join(p, noopJoined);
-});
-
-test('Stage.fork clears running state when callback throws synchronously', async (t) => {
-    const master = Stage.getThread();
-    const boom = new Error('boom-sync');
-    const p = Stage.fork('sync-throw', () => {
-        throw boom;
-    }, noopForked);
-
-    const thrown = await t.throwsAsync(async () => await p);
-    t.is(thrown, boom);
-    t.false(p.thread.running);
-    t.true(master.slaves.has(p.thread));
-
-    const joinThrown = await t.throwsAsync(async () => await Stage.join(p, noopJoined));
-    t.is(joinThrown, boom);
-    t.false(master.slaves.has(p.thread));
-});
-
-test('Stage.forkjoin forwards synchronous throw from fn and detaches slave', async (t) => {
-    const master = Stage.getThread();
-    let seenSlave: Stage.Thread | undefined;
-    let seenError: unknown;
-    const boom = new Error('boom-forkjoin-sync');
-
-    const thrown = await t.throwsAsync(async () => await Stage.forkjoin(
-        'forkjoin-sync-throw',
-        () => {
-            throw boom;
-        },
-        noopForked,
-        (slave, e) => {
-            seenSlave = slave;
-            seenError = e;
-        },
-    ));
-
-    t.is(thrown, boom);
-    t.is(seenError, undefined);
-    t.is(seenSlave?.name, 'forkjoin-sync-throw');
-    t.false(seenSlave?.running ?? true);
-    t.false(master.slaves.has(seenSlave!));
-});
-
-test('Stage.joinSync rejects slave that still has child threads', (t) => {
-    const root = Stage.getThread();
-    const parent = Stage.forkSync('parent', noopForked);
-    Stage.sw1tch(parent);
-    const child = Stage.forkSync('child', noopForked);
-    Stage.sw1tch(root);
-
-    t.throws(() => Stage.joinSync(parent, noopJoined), { message: /has its own slave threads/ });
-
-    Stage.sw1tch(parent);
-    Stage.joinSync(child, noopJoined);
-    Stage.sw1tch(root);
-    Stage.joinSync(parent, noopJoined);
-});
-
-test('Stage.joinSync rejects repeated joins after detachment', (t) => {
-    const slave = Stage.forkSync('once-only', noopForked);
-    Stage.joinSync(slave, noopJoined);
-
-    t.throws(() => Stage.joinSync(slave, noopJoined), { message: /not a slave of the current thread/ });
-});
-
-test('Stage.forkjoin composes fork and join listeners', async (t) => {
-    const marks: string[] = [];
-    const result = await Stage.forkjoin(
-        'forkjoin-job',
-        async () => {
-            marks.push('run');
-            return 'done';
-        },
-        (slave) => {
-            marks.push(`fork:${slave.name}`);
-        },
-        (slave) => {
-            marks.push(`join:${slave.name}`);
-        },
-    );
-
-    t.is(result, 'done');
-    t.deepEqual(marks, [
-        'fork:forkjoin-job',
-        'run',
-        'join:forkjoin-job',
-    ]);
+	t.is(demo.add.name, 'add');
+	t.is(demo.add(2), 12);
+	t.is(await demo.addAsync(5), 15);
+	t.deepEqual(spanNames, ['add', 'custom-async']);
 });
