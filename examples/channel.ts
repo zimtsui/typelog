@@ -15,22 +15,28 @@ declare const ENV: string;
 const envLevel = envlevels[ENV] ?? Level.info;
 
 // Create an event target for listening to log events.
-const eventTarget = new EventTarget() as LogEventTarget<{
+type channelMap = {
     symbolChannelEventType: [typeof Level, payloadType: symbol];
     numberChannelEventType: [typeof Level, payloadType: number];
-}>;
-eventTarget.addEventListener('numberChannelEventType', (evt: LogEvent<'numberChannelEventType', typeof Level, number>) => {
-    if (evt.level >= envLevel) console.log(evt.detail satisfies number);
-});
-eventTarget.addEventListener('symbolChannelEventType', (evt: LogEvent<'symbolChannelEventType', typeof Level, symbol>) => {
-    if (evt.level >= envLevel) console.log(evt.detail satisfies symbol);
-});
-
+};
+const eventTarget = new EventTarget() as LogEventTarget<channelMap>;
+eventTarget.addEventListener(
+    'numberChannelEventType',
+    (evt: LogEvent<'numberChannelEventType', typeof Level, number>) => {
+        if (evt.level >= envLevel) console.log(evt.detail satisfies number);
+    },
+);
+eventTarget.addEventListener(
+    'symbolChannelEventType',
+    (evt: LogEvent<'symbolChannelEventType', typeof Level, symbol>) => {
+        if (evt.level >= envLevel) console.log(evt.detail satisfies symbol);
+    },
+);
 
 // Create loggers.
 const logger = {
-    symbolChannel: Channel.attach(eventTarget, 'symbolChannelEventType', Level),
-    numberChannel: Channel.attach(eventTarget, 'numberChannelEventType', Level),
+    symbolChannel: Channel.attach<channelMap, 'symbolChannelEventType'>(eventTarget, 'symbolChannelEventType', Level),
+    numberChannel: Channel.attach<channelMap, 'numberChannelEventType'>(eventTarget, 'numberChannelEventType', Level),
 	stringChannel: Channel.create<typeof Level, string>(Level, (message, level) => {
 		if (level >= envLevel) console.log(message);
 	}),

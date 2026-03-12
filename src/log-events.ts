@@ -33,5 +33,12 @@ export namespace ChannelMap {
     };
 }
 
+
 export type LogEventTarget<channelMap extends ChannelMap.Prototype>
     = EventTarget<ChannelMap.Names<channelMap>, ChannelMap.EventMap<channelMap>>;
+export namespace LogEventTarget {
+    export type Subscribe<channelMap extends ChannelMap.Prototype>
+        = EventTarget.Subscribe<ChannelMap.Names<channelMap>, ChannelMap.EventMap<channelMap>>;
+    export type Publish<channelMap extends ChannelMap.Prototype>
+        = EventTarget.Publish<ChannelMap.Names<channelMap>, ChannelMap.EventMap<channelMap>>;
+}

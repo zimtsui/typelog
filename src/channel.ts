@@ -33,7 +33,7 @@ export namespace Channel {
         channelMap extends ChannelMap.Prototype,
         eventType extends ChannelMap.Names<channelMap>,
     >(
-        eventTarget: LogEventTarget<channelMap>,
+        eventTarget: LogEventTarget.Publish<channelMap>,
         eventType: eventType,
         levelEnum: ChannelMap.LevelEnum<channelMap, eventType>,
         signal?: AbortSignal,

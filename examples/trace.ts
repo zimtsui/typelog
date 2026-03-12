@@ -1,4 +1,4 @@
-import { Tracer } from '@zimtsui/typelog/tracer';
+import { Tracer } from '@zimtsui/typelog/trace';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { ConsoleSpanExporter } from '@opentelemetry/sdk-trace-base';
 
@@ -9,11 +9,11 @@ sdk.start();
 const tracer = Tracer.create('example', '0.0.1');
 
 class A {
-    @tracer.activeAsync()
+    @tracer.forkedAsync()
     public async f2(x: number): Promise<string> {
         return f3(x);
     }
-    @tracer.activeSync()
+    @tracer.forkedSync()
     public f4(x: number): string  {
         return String(x);
     }
@@ -25,7 +25,7 @@ namespace F3 {
         function f3(x: number): string {
             return a.f4(x);
         }
-        return (x: number) => tracer.activateSync(f3.name, () => f3(x));
+        return (x: number) => tracer.forkSync(f3.name, () => f3(x));
     }
 }
 const f3 = F3.create();
@@ -35,7 +35,7 @@ namespace F1 {
         async function f1(x: number): Promise<string> {
             return await a.f2(x);
         }
-        return (x: number) => tracer.activateAsync(f1.name, () => f1(x));
+        return (x: number) => tracer.forkAsync(f1.name, () => f1(x));
     }
 }
 const f1 = F1.create();

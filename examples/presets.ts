@@ -8,13 +8,6 @@ const envLevel = Presets.envlevels[env.NODE_ENV ?? ''] ?? Presets.Level.info;
 export const channel = Channel.create(
 	Presets.Level,
 	(message, level) => {
-		if (level >= envLevel) console.error(
-			Presets.prompt(
-				formatWithOptions({ depth: null, colors: !!stderr.isTTY }, message),
-				'Default',
-				level,
-				stderr.isTTY,
-			),
-		);
+		if (level >= envLevel) console.error(formatWithOptions({ depth: null, colors: !!stderr.isTTY }, message));
 	},
 );
