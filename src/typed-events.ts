@@ -1,9 +1,17 @@
-export interface Event<out eventTypes extends string> extends globalThis.Event {
-    readonly type: eventTypes;
+export interface Event<out eventType extends string> extends globalThis.Event {
+    readonly type: eventType;
 }
 
-export interface EventListener<in events extends globalThis.Event> {
-    (event: events): void;
+export class CustomEvent<out eventType extends string, payload> extends globalThis.CustomEvent<payload> implements Event<eventType> {
+    public override readonly type: eventType;
+    public constructor(eventType: eventType, payload: payload) {
+        super(eventType, { detail: payload });
+        this.type = eventType;
+    }
+}
+
+export interface EventListener<in event extends globalThis.Event> {
+    (event: event): void;
 }
 
 export namespace EventMap {

@@ -8,13 +8,13 @@ export namespace LevelEnum {
 }
 
 export class LogEvent<
-    out eventTypes extends string,
+    out eventType extends string,
     in out levelEnum extends LevelEnum.Prototype,
     out message,
-> extends globalThis.CustomEvent<message> implements Event<eventTypes> {
-    public override readonly type: eventTypes;
+> extends globalThis.CustomEvent<message> implements Event<eventType> {
+    public override readonly type: eventType;
     public readonly level: LevelEnum.Level<levelEnum>;
-    public constructor(eventType: eventTypes, level: LevelEnum.Level<levelEnum>, message: message) {
+    public constructor(eventType: eventType, level: LevelEnum.Level<levelEnum>, message: message) {
         super(eventType, { detail: message });
         this.type = eventType;
         this.level = level;
