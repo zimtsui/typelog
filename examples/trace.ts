@@ -1,4 +1,4 @@
-import { Tracer } from '@zimtsui/typelog/trace';
+import { Tracer } from '@zimtsui/typelemetry/trace';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { ConsoleSpanExporter } from '@opentelemetry/sdk-trace-base';
 

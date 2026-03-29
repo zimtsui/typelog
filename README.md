@@ -1,13 +1,13 @@
-# TypeLog
+# Typelemetry
 
-[![NPM Version](https://img.shields.io/npm/v/@zimtsui/typelog?style=flat-square)](https://www.npmjs.com/package/@zimtsui/typelog)
+[![NPM Version](https://img.shields.io/npm/v/@zimtsui/typelemetry?style=flat-square)](https://www.npmjs.com/package/@zimtsui/typelemetry)
 
 TypeLog is a strongly typed logger for concurrent TypeScript programs.
 
 ## Channel
 
 ```ts
-import { Channel, type LogEventTarget, LogEvent } from '@zimtsui/typelog';
+import { Channel, type LogEventTarget, LogEvent } from '@zimtsui/typelemetry';
 
 // Declare all log levels whose values are sorted from verbose to severe.
 enum Level { trace, debug, info, warn, error }
@@ -60,8 +60,8 @@ logger.stringChannel.trace('Hello, world!');
 ## Level presets
 
 ```ts
-import { Channel } from '@zimtsui/typelog';
-import * as Presets from '@zimtsui/typelog/presets';
+import { Channel } from '@zimtsui/typelemetry';
+import * as Presets from '@zimtsui/typelemetry/presets';
 import { env, stderr } from 'node:process';
 import { formatWithOptions } from 'node:util';
 
@@ -78,7 +78,7 @@ export const channel = Channel.create(
 ## Trace
 
 ```ts
-import { Tracer } from '@zimtsui/typelog/trace';
+import { Tracer } from '@zimtsui/typelemetry/trace';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { ConsoleSpanExporter } from '@opentelemetry/sdk-trace-base';
 
@@ -129,9 +129,9 @@ await sdk.shutdown();
 OpenTelemetry Node.js Log SDK has no stable release yet. Typelog provides a fallback implementation.
 
 ```ts
-import { Exporter } from '@zimtsui/typelog/exporter';
-import * as Presets from '@zimtsui/typelog/presets';
-import { Channel } from '@zimtsui/typelog';
+import { Exporter } from '@zimtsui/typelemetry/exporter';
+import * as Presets from '@zimtsui/typelemetry/presets';
+import { Channel } from '@zimtsui/typelemetry';
 import { formatWithOptions } from 'node:util';
 import { stderr } from 'node:process';
 

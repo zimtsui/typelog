@@ -1,6 +1,6 @@
-import { Exporter } from '@zimtsui/typelog/exporter';
-import * as Presets from '@zimtsui/typelog/presets';
-import { Channel } from '@zimtsui/typelog';
+import { Exporter } from '@zimtsui/typelemetry/exporter';
+import * as Presets from '@zimtsui/typelemetry/presets';
+import { Channel } from '@zimtsui/typelemetry';
 import { formatWithOptions } from 'node:util';
 import { stderr } from 'node:process';
 

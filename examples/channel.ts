@@ -1,4 +1,4 @@
-import { Channel, type LogEventTarget, LogEvent } from '@zimtsui/typelog';
+import { Channel, type LogEventTarget, LogEvent } from '@zimtsui/typelemetry';
 
 // Declare all log levels whose values are sorted from verbose to severe.
 enum Level { trace, debug, info, warn, error }
