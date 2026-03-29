@@ -1,4 +1,4 @@
-import * as Presets from './presets.ts';
+import * as Presets from './log/presets.ts';
 
 
 export interface Message {

@@ -1,2 +1,2 @@
-export * from './channel.ts';
-export * from './log-events.ts';
+export * from './log/channel.ts';
+export * from './log/event.ts';

@@ -1,4 +1,4 @@
-import { type LevelEnum, type LogEventTarget, type ChannelMap, LogEvent } from './log-events.ts';
+import { type LevelEnum, type LogEventTarget, type ChannelMap, LogEvent } from './event.ts';
 
 
 export type Channel<levelEnum extends LevelEnum.Prototype, message = unknown> = {
