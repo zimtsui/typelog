@@ -1,9 +1,9 @@
 import test, { type ExecutionContext } from 'ava';
 import * as OTEL from '@opentelemetry/api';
-import { Channel } from '../build/channel.js';
-import { LogEvent } from '../build/log-events.js';
-import { Level, envlevels } from '../build/presets.js';
-import { Tracer } from '../build/trace.js';
+import { Channel } from '../../build/channel.js';
+import { LogEvent } from '../../build/log-events.js';
+import { Level, envlevels } from '../../build/presets.js';
+import { Tracer } from '../../build/trace.js';
 
 function withMockOtel(t: ExecutionContext) {
 	const originalGetTracer = OTEL.trace.getTracer;

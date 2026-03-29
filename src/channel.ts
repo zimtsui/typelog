@@ -39,7 +39,7 @@ export namespace Channel {
         signal?: AbortSignal,
     ) {
         type levelEnum = ChannelMap.LevelEnum<channelMap, eventType>;
-        type message = ChannelMap.Message<channelMap, eventType>;
+        type message = ChannelMap.Payload<channelMap, eventType>;
         return new Proxy({} as Channel<levelEnum, message>, {
             get(target, prop) {
                 if (typeof prop === 'string' && Object.keys(levelEnum).includes(prop))

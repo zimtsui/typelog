@@ -4,7 +4,7 @@
         "module": "preserve",
         "moduleDetection": "force",
         "lib": ["esnext", "dom"],
-        "types": ["node"],
+        "types": [],
         "sourceMap": true,
         "experimentalDecorators": true,
         "noUncheckedIndexedAccess": true,
@@ -17,9 +17,13 @@
         "checkJs": true,
         "composite": true,
         "rootDir": ".",
+        "outDir": "../build",
         "skipLibCheck": true
     },
     "include": [
         "./**/*",
-    ]
+    ],
+	"references": [
+		{ "path": "../../src/tsconfig.json" }
+	]
 }

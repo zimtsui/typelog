@@ -1,4 +1,4 @@
-import { type EventTarget, type Event } from './typed-events.ts';
+import { type EventTarget, CustomEvent } from '@zimtsui/typevent';
 
 
 export namespace LevelEnum {
@@ -8,15 +8,13 @@ export namespace LevelEnum {
 }
 
 export class LogEvent<
-    out eventType extends string,
+    out eventTypeUnion extends string,
     in out levelEnum extends LevelEnum.Prototype,
-    out message,
-> extends globalThis.CustomEvent<message> implements Event<eventType> {
-    public override readonly type: eventType;
+    out payload,
+> extends CustomEvent<eventTypeUnion, payload> {
     public readonly level: LevelEnum.Level<levelEnum>;
-    public constructor(eventType: eventType, level: LevelEnum.Level<levelEnum>, message: message) {
-        super(eventType, { detail: message });
-        this.type = eventType;
+    public constructor(eventType: eventTypeUnion, level: LevelEnum.Level<levelEnum>, message: payload) {
+        super(eventType, message);
         this.level = level;
     }
 }
@@ -25,20 +23,22 @@ export namespace ChannelMap {
     export type Prototype = Record<string, [LevelEnum.Prototype, unknown]>;
     export type Names<channelMap extends ChannelMap.Prototype> = Extract<keyof channelMap, string>;
     export type LevelEnum<channelMap extends ChannelMap.Prototype, eventType extends Names<channelMap>> = channelMap[eventType][0];
-    export type Message<channelMap extends ChannelMap.Prototype, eventType extends Names<channelMap>> = channelMap[eventType][1];
+    export type Payload<channelMap extends ChannelMap.Prototype, eventType extends Names<channelMap>> = channelMap[eventType][1];
     export type EventMap<in out channelMap extends ChannelMap.Prototype> = {
-        [eventType in Names<channelMap>]: (
-            event: LogEvent<eventType, LevelEnum<channelMap, eventType>, Message<channelMap, eventType>>,
-        ) => LogEvent<eventType, LevelEnum<channelMap, eventType>, Message<channelMap, eventType>>;
+        [eventType in Names<channelMap>]: LogEvent<eventType, LevelEnum<channelMap, eventType>, Payload<channelMap, eventType>>;
     };
 }
 
 
-export type LogEventTarget<channelMap extends ChannelMap.Prototype>
-    = EventTarget<ChannelMap.Names<channelMap>, ChannelMap.EventMap<channelMap>>;
+export type LogEventTarget<
+    channelMap extends ChannelMap.Prototype,
+> = EventTarget<ChannelMap.Names<channelMap>, ChannelMap.EventMap<channelMap>>;
+
 export namespace LogEventTarget {
-    export type Subscribe<channelMap extends ChannelMap.Prototype>
-        = EventTarget.Subscribe<ChannelMap.Names<channelMap>, ChannelMap.EventMap<channelMap>>;
-    export type Publish<channelMap extends ChannelMap.Prototype>
-        = EventTarget.Publish<ChannelMap.Names<channelMap>, ChannelMap.EventMap<channelMap>>;
+    export type Subscribe<
+        channelMap extends ChannelMap.Prototype,
+    > = EventTarget.Subscribe<ChannelMap.Names<channelMap>, ChannelMap.EventMap<channelMap>>;
+    export type Publish<
+        channelMap extends ChannelMap.Prototype,
+    > = EventTarget.Publish<ChannelMap.Names<channelMap>, ChannelMap.EventMap<channelMap>>;
 }

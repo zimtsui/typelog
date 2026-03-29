@@ -3,7 +3,6 @@
   "version": "0.0.29",
   "exports": {
     ".": "./build/exports.js",
-    "./typed-events": "./build/typed-events.js",
     "./presets": "./build/presets.js",
     "./trace": "./build/trace.js",
     "./exporter": "./build/exporter.js"
@@ -11,7 +10,8 @@
   "description": "",
   "type": "module",
   "scripts": {
-    "test": "npm run build && ava ./build/test.js",
+    "test": "tsc -b ./test/src/tsconfig.json && ava ./test/build/test.js",
+    "test:clean": "rm -rf ./test/build",
     "build": "tsc -b ./src/tsconfig.json",
     "clean": "rm -rf ./build",
     "prepublishOnly": "npm run clean && npm run build"
@@ -27,13 +27,14 @@
   "devDependencies": {
     "@opentelemetry/sdk-node": "^0.213.0",
     "@opentelemetry/sdk-trace-node": "^2.6.0",
-    "ava": "^7.0.0"
+    "ava": "^7.0.0",
+    "typescript": "^6.0.2"
   },
   "ava": {
     "failWithoutAssertions": false
   },
   "peerDependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@types/node": "^22.19.13"
+    "@zimtsui/typevent": "^0.0.1"
   }
 }
