@@ -57,6 +57,9 @@ export namespace Tracer {
             }
         }
 
+        /**
+         * @param generator Ownership transferred.
+         */
         public async *hookAsync<TYield, TReturn, TNext>(
             name: string,
             generator: AsyncGenerator<TYield, TReturn, TNext>,
