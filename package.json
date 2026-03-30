@@ -2,7 +2,7 @@
   "name": "@zimtsui/typelemetry",
   "version": "0.0.34",
   "exports": {
-    "./trace": "./build/trace/exports.js",
+    "./trace": "./build/trace/tracer.js",
     "./log": "./build/log/exports.js",
     "./log/presets": "./build/log/presets/level.js"
   },

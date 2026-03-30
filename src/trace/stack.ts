@@ -1,22 +1,26 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import * as OTEL from '@opentelemetry/api';
 
-const map = new WeakMap<Error, string[]>();
 
-export function prepend(e: Error, name: string): void {
-    const stack = map.get(e) ?? [];
-    map.set(e, [name, ...stack]);
+
+export interface Frame {
+    name: string;
+    attrs: Record<string, OTEL.AttributeValue>;
 }
 
-export function read(e: Error): string[] {
-    return map.get(e) ?? [];
-}
+export class Stack {
+    protected als = new AsyncLocalStorage<Frame[]>();
 
-const stack = new AsyncLocalStorage<string[]>();
+    public getFrames(): Frame[] {
+        return this.als.getStore() ?? [];
+    }
 
-export function run<T>(f: () => T, name: string): T {
-    return stack.run([...now(), name], f);
-}
+    public getFrame(): Frame | undefined {
+        const frames = this.getFrames();
+        return frames.at(-1);
+    }
 
-export function now(): string[] {
-    return stack.getStore() ?? [];
+    public run<T>(name: string, f: () => T): T {
+        return this.als.run([...this.getFrames(), { name, attrs: {} }], f);
+    }
 }

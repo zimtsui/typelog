@@ -1,5 +1,6 @@
 import * as OTEL from '@opentelemetry/api';
-import * as Stack from './stack.ts';
+import { Frame, Stack } from './stack.ts';
+import { Injection } from './injection.ts';
 
 
 
@@ -10,6 +11,8 @@ export namespace Tracer {
     }
     export class Instance {
         protected tracer: OTEL.Tracer;
+        protected stack = new Stack();
+        protected injection = new Injection(this.stack);
 
         public constructor(
             scope: string,
@@ -18,40 +21,65 @@ export namespace Tracer {
             this.tracer = OTEL.trace.getTracer(scope, version);
         }
 
-        public createSync<R>(name: string, f: () => R, masterContext: OTEL.Context): R {
+        public setAttr(key: string, value: OTEL.AttributeValue): void {
+            const span = OTEL.trace.getActiveSpan();
+            if (span) span.setAttribute(key, value);
+            const frame = this.stack.getFrame();
+            if (frame) frame.attrs[key] = value;
+        }
+
+        public extract(e: Error): Frame[] {
+            return this.injection.read(e);
+        }
+
+        public now(): Frame[] {
+            return this.stack.getFrames();
+        }
+
+        protected createSync<R>(name: string, f: () => R, masterContext: OTEL.Context): R {
             const slaveSpan = this.tracer.startSpan(name, {}, masterContext);
             const slaveContext = OTEL.trace.setSpan(masterContext, slaveSpan);
-            try {
-                return OTEL.context.with(slaveContext, () => Stack.run(f, name));
-            } catch (e) {
-                if (e instanceof Error) {
-                    slaveSpan.recordException(e);
-                    Stack.prepend(e, name);
-                }
-                slaveSpan.setStatus({ code: OTEL.SpanStatusCode.ERROR });
-                throw e;
-            } finally {
-                slaveSpan.end();
-            }
+            return this.stack.run(
+                name,
+                () => {
+                    try {
+                        return OTEL.context.with(slaveContext, f);
+                    } catch (e) {
+                        if (e instanceof Error) {
+                            this.injection.prepend(e);
+                            slaveSpan.recordException(e);
+                        }
+                        slaveSpan.setStatus({ code: OTEL.SpanStatusCode.ERROR });
+                        throw e;
+                    } finally {
+                        slaveSpan.end();
+                    }
+                },
+            );
         }
         /**
          * @param f is allowed to throw synchronously.
          */
-        public async createAsync<R>(name: string, f: () => PromiseLike<R>, masterContext: OTEL.Context): Promise<Awaited<R>> {
+        protected async createAsync<R>(name: string, f: () => PromiseLike<R>, masterContext: OTEL.Context): Promise<Awaited<R>> {
             const slaveSpan = this.tracer.startSpan(name, {}, masterContext);
             const slaveContext = OTEL.trace.setSpan(masterContext, slaveSpan);
-            try {
-                return await OTEL.context.with(slaveContext, () => Stack.run(f, name));
-            } catch (e) {
-                if (e instanceof Error) {
-                    slaveSpan.recordException(e);
-                    Stack.prepend(e, name);
-                }
-                slaveSpan.setStatus({ code: OTEL.SpanStatusCode.ERROR });
-                throw e;
-            } finally {
-                slaveSpan.end();
-            }
+            return await this.stack.run(
+                name,
+                async () => {
+                    try {
+                        return await OTEL.context.with(slaveContext, f);
+                    } catch (e) {
+                        if (e instanceof Error) {
+                            this.injection.prepend(e);
+                            slaveSpan.recordException(e);
+                        }
+                        slaveSpan.setStatus({ code: OTEL.SpanStatusCode.ERROR });
+                        throw e;
+                    } finally {
+                        slaveSpan.end();
+                    }
+                },
+            );
         }
 
         public spawnSync<R>(name: string, f: () => R): R {
