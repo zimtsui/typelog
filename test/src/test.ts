@@ -457,3 +457,96 @@ test.serial('spawned decorators create root spans and allow custom names', async
         await cleanup();
     }
 });
+
+test.serial('Tracer.hookSync resumes a generator inside forked spans', async (t) => {
+    const { exporter, cleanup } = useTracerProvider();
+    const tracer = Tracer.create('scope');
+
+    try {
+        const activeSpanNames: string[] = [];
+        function* source(): Generator<string, string, string> {
+            activeSpanNames.push(OTEL.trace.getActiveSpan()?.spanContext().spanId ?? '');
+            tracer.setAttr('step', 'first');
+            const first = yield 'one';
+            activeSpanNames.push(OTEL.trace.getActiveSpan()?.spanContext().spanId ?? '');
+            tracer.setAttr('input', first);
+            try {
+                yield `two:${first}`;
+            } catch (e) {
+                activeSpanNames.push(OTEL.trace.getActiveSpan()?.spanContext().spanId ?? '');
+                tracer.setAttr('error', e instanceof Error ? e.message : 'unknown');
+            }
+            return 'done';
+        }
+
+        const hooked = tracer.spawnSync('parent', () => tracer.hookSync('hook-sync', source()));
+        const first = hooked.next();
+        const second = hooked.next('value');
+        const third = hooked.throw(new Error('boom'));
+
+        await Promise.resolve();
+
+        const spans = exporter.getFinishedSpans().filter((span) => span.name === 'hook-sync');
+        t.deepEqual(first, { value: 'one', done: false });
+        t.deepEqual(second, { value: 'two:value', done: false });
+        t.deepEqual(third, { value: 'done', done: true });
+        t.is(activeSpanNames.length, 3);
+        t.true(activeSpanNames.every(Boolean));
+        t.is(spans.length, 3);
+        t.deepEqual(spans.map((span) => span.attributes), [
+            { step: 'first' },
+            { input: 'value' },
+            { error: 'boom' },
+        ]);
+    } finally {
+        await cleanup();
+    }
+});
+
+test.serial('Tracer.hookAsync resumes an async generator inside forked spans', async (t) => {
+    const { exporter, cleanup } = useTracerProvider();
+    const tracer = Tracer.create('scope');
+
+    try {
+        const activeSpanNames: string[] = [];
+        async function* source(): AsyncGenerator<string, string, string> {
+            await Promise.resolve();
+            activeSpanNames.push(OTEL.trace.getActiveSpan()?.spanContext().spanId ?? '');
+            tracer.setAttr('phase', 'first');
+            const first = yield 'alpha';
+            await Promise.resolve();
+            activeSpanNames.push(OTEL.trace.getActiveSpan()?.spanContext().spanId ?? '');
+            tracer.setAttr('input', first);
+            try {
+                yield `beta:${first}`;
+            } catch (e) {
+                await Promise.resolve();
+                activeSpanNames.push(OTEL.trace.getActiveSpan()?.spanContext().spanId ?? '');
+                tracer.setAttr('error', e instanceof Error ? e.message : 'unknown');
+            }
+            return 'done';
+        }
+
+        const hooked = await tracer.spawnAsync('parent-async', async () => tracer.hookAsync('hook-async', source()));
+        const first = await hooked.next();
+        const second = await hooked.next('value');
+        const third = await hooked.throw(new Error('boom'));
+
+        await Promise.resolve();
+
+        const spans = exporter.getFinishedSpans().filter((span) => span.name === 'hook-async');
+        t.deepEqual(first, { value: 'alpha', done: false });
+        t.deepEqual(second, { value: 'beta:value', done: false });
+        t.deepEqual(third, { value: 'done', done: true });
+        t.is(activeSpanNames.length, 3);
+        t.true(activeSpanNames.every(Boolean));
+        t.is(spans.length, 3);
+        t.deepEqual(spans.map((span) => span.attributes), [
+            { phase: 'first' },
+            { input: 'value' },
+            { error: 'boom' },
+        ]);
+    } finally {
+        await cleanup();
+    }
+});
