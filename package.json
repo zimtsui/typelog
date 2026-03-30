@@ -1,6 +1,6 @@
 {
   "name": "@zimtsui/typelemetry",
-  "version": "0.0.29",
+  "version": "0.0.31",
   "exports": {
     ".": "./build/exports.js",
     "./presets": "./build/presets.js",
