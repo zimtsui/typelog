@@ -20,12 +20,10 @@
     "url": "git+https://github.com/zimtsui/typelemetry.git"
   },
   "author": "Zim",
-  "dependencies": {
-    "@types/node": "^22.19.15"
-  },
   "devDependencies": {
     "@opentelemetry/sdk-node": "^0.213.0",
     "@opentelemetry/sdk-trace-node": "^2.6.0",
+    "@types/node": "^22.19.15",
     "ava": "^7.0.0",
     "typescript": "^6.0.2"
   },
