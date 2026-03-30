@@ -4,6 +4,21 @@
 
 TypeLog is a strongly typed logger for concurrent TypeScript programs.
 
+## Architecture
+
+```mermaid
+classDiagram
+
+TypelemetryLog o--> TypelemetryTrace
+TypelemetryTrace o--> OtelTraceApi
+OtelTraceApi <--o OtelApi
+OtelMetricsApi <--o OtelApi
+OtelLogApi <--o OtelApi
+OtelApi <|-- OtelSdk
+```
+
+Until now (2026-03), OpenTelemetry Log API has no stable release yet.
+
 ## Channel
 
 ```ts

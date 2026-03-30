@@ -1,4 +1,4 @@
-import { type EventTarget, CustomEvent } from '@zimtsui/typevent';
+import type { EventTarget, CustomEvent } from '@zimtsui/typevent';
 
 
 export namespace LevelEnum {
@@ -11,10 +11,12 @@ export class LogEvent<
     out eventTypeUnion extends string,
     in out levelEnum extends LevelEnum.Prototype,
     out payload,
-> extends CustomEvent<eventTypeUnion, payload> {
-    public readonly level: LevelEnum.Level<levelEnum>;
-    public constructor(eventType: eventTypeUnion, level: LevelEnum.Level<levelEnum>, message: payload) {
-        super(eventType, message);
+> extends globalThis.CustomEvent<payload> implements CustomEvent<eventTypeUnion, payload> {
+    public level: LevelEnum.Level<levelEnum>;
+    public override type: eventTypeUnion;
+    public constructor(eventType: eventTypeUnion, level: LevelEnum.Level<levelEnum>, payload: payload) {
+        super(eventType, { detail: payload });
+        this.type = eventType;
         this.level = level;
     }
 }

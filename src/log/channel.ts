@@ -14,7 +14,7 @@ export namespace Channel {
         return new Proxy({} as Channel<levelEnum, message>, {
             get(target, prop) {
                 if (typeof prop === 'string' && Object.keys(levelEnum).includes(prop))
-                    return (message: message) => signal?.aborted
+                    return (message: message): void => signal?.aborted
                         ? void undefined
                         : f(message, levelEnum[prop as LevelEnum.Name<levelEnum>]);
                 else throw new Error();
@@ -26,7 +26,7 @@ export namespace Channel {
         f: (message: message) => void,
         signal?: AbortSignal,
     ) {
-        return (message: message) => signal?.aborted ? void undefined : f(message);
+        return (message: message): void => signal?.aborted ? void undefined : f(message);
     }
 
     export function attach<
@@ -43,7 +43,7 @@ export namespace Channel {
         return new Proxy({} as Channel<levelEnum, message>, {
             get(target, prop) {
                 if (typeof prop === 'string' && Object.keys(levelEnum).includes(prop))
-                    return (message: message) => signal?.aborted
+                    return (message: message): boolean => signal?.aborted
                         ? true
                         : eventTarget.dispatchEvent(
                             new LogEvent(eventType, levelEnum[prop as LevelEnum.Name<levelEnum>], message),

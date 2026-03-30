@@ -1,4 +1,5 @@
 import * as OTEL from '@opentelemetry/api';
+import * as Stack from './stack.ts';
 
 
 
@@ -26,7 +27,10 @@ export namespace Tracer {
                     f,
                 );
             } catch (e) {
-                if (e instanceof Error) slaveSpan.recordException(e);
+                if (e instanceof Error) {
+                    slaveSpan.recordException(e);
+                    Stack.append(e, name);
+                }
                 slaveSpan.setStatus({ code: OTEL.SpanStatusCode.ERROR });
                 throw e;
             } finally {

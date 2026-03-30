@@ -2,10 +2,9 @@
   "name": "@zimtsui/typelemetry",
   "version": "0.0.31",
   "exports": {
-    ".": "./build/exports.js",
-    "./presets": "./build/presets.js",
-    "./trace": "./build/trace.js",
-    "./exporter": "./build/exporter.js"
+    "./trace": "./build/trace/exports.js",
+    "./log": "./build/log/exports.js",
+    "./log/presets": "./build/log/presets/exports.js"
   },
   "description": "",
   "type": "module",
@@ -22,7 +21,7 @@
   },
   "author": "Zim",
   "dependencies": {
-    "chalk": "^5.6.2"
+    "@types/node": "^22.19.15"
   },
   "devDependencies": {
     "@opentelemetry/sdk-node": "^0.213.0",
@@ -35,6 +34,6 @@
   },
   "peerDependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@zimtsui/typevent": "^0.0.1"
+    "@zimtsui/typevent": "^0.0.2"
   }
 }
