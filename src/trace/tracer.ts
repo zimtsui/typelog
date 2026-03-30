@@ -26,7 +26,7 @@ export namespace Tracer {
             } catch (e) {
                 if (e instanceof Error) {
                     slaveSpan.recordException(e);
-                    Stack.append(e, name);
+                    Stack.prepend(e, name);
                 }
                 slaveSpan.setStatus({ code: OTEL.SpanStatusCode.ERROR });
                 throw e;
@@ -45,7 +45,7 @@ export namespace Tracer {
             } catch (e) {
                 if (e instanceof Error) {
                     slaveSpan.recordException(e);
-                    Stack.append(e, name);
+                    Stack.prepend(e, name);
                 }
                 slaveSpan.setStatus({ code: OTEL.SpanStatusCode.ERROR });
                 throw e;
