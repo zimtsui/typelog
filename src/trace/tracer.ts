@@ -22,7 +22,7 @@ export namespace Tracer {
             const slaveSpan = this.tracer.startSpan(name, {}, masterContext);
             const slaveContext = OTEL.trace.setSpan(masterContext, slaveSpan);
             try {
-                return OTEL.context.with(slaveContext, f);
+                return OTEL.context.with(slaveContext, () => Stack.run(f, name));
             } catch (e) {
                 if (e instanceof Error) {
                     slaveSpan.recordException(e);
@@ -41,7 +41,7 @@ export namespace Tracer {
             const slaveSpan = this.tracer.startSpan(name, {}, masterContext);
             const slaveContext = OTEL.trace.setSpan(masterContext, slaveSpan);
             try {
-                return await OTEL.context.with(slaveContext, f);
+                return await OTEL.context.with(slaveContext, () => Stack.run(f, name));
             } catch (e) {
                 if (e instanceof Error) {
                     slaveSpan.recordException(e);
