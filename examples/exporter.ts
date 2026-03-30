@@ -13,8 +13,8 @@ const exporter: Exporter = {
 Exporter.setGlobalExporter(exporter);
 
 const channel = Channel.create(
-	Presets.Level,
-	(payload, level) => {
+    Presets.Level,
+    (payload, level) => {
         if (level >= Presets.Level.info)
             Exporter.getGlobalExporter().monolith({
                 scope: 'Example',
@@ -22,7 +22,7 @@ const channel = Channel.create(
                 payload,
                 level: Presets.Level[level],
             });
-	},
+    },
 );
 
 channel.info('Hello, world!');

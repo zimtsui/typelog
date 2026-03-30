@@ -80,9 +80,9 @@ enum Level { trace, debug, info, warn, error }
 
 // Declare log levels for different environments.
 const envlevels: Record<string, Level> = {
-	debug: Level.trace,
-	development: Level.debug,
-	production: Level.warn,
+    debug: Level.trace,
+    development: Level.debug,
+    production: Level.warn,
 };
 
 // Determine the log level according to the environment variable.
@@ -107,22 +107,22 @@ Exporter.setGlobalExporter(consoleExporter);
 
 // Create loggers.
 const logger = {
-	number: Channel.create<typeof Level, number>(Level, (message, level) => {
-		if (level >= envLevel) Exporter.getGlobalExporter().monolith({
+    number: Channel.create<typeof Level, number>(Level, (message, level) => {
+        if (level >= envLevel) Exporter.getGlobalExporter().monolith({
             scope: 'main',
             level: Level[level],
             payload: message,
             channel: 'number',
         });
-	}),
-	string: Channel.create<typeof Level, string>(Level, (message, level) => {
-		if (level >= envLevel) Exporter.getGlobalExporter().monolith({
+    }),
+    string: Channel.create<typeof Level, string>(Level, (message, level) => {
+        if (level >= envLevel) Exporter.getGlobalExporter().monolith({
             scope: 'main',
             level: Level[level],
             payload: message,
             channel: 'string',
         });
-	}),
+    }),
 };
 
 // Use loggers.
@@ -141,9 +141,9 @@ import { formatWithOptions } from 'node:util';
 const envLevel = Presets.envlevels[env.NODE_ENV ?? ''] ?? Presets.Level.info;
 
 export const channel = Channel.create(
-	Presets.Level,
-	(message, level) => {
-		if (level >= envLevel) console.error(formatWithOptions({ depth: null, colors: !!stderr.isTTY }, message));
-	},
+    Presets.Level,
+    (message, level) => {
+        if (level >= envLevel) console.error(formatWithOptions({ depth: null, colors: !!stderr.isTTY }, message));
+    },
 );
 ```

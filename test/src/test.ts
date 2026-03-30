@@ -76,23 +76,23 @@ test.serial('Exporter global instance is configurable', (t) => {
     t.is(Exporter.getGlobalExporter(), exporter);
 });
 
-test.serial('Exporter.Noop accepts both export methods', (t) => {
+test.serial('Exporter.Noop accepts arbitrary message payloads', (t) => {
     const exporter: Exporter = new Exporter.Noop();
-    const unicode = {
+    const structured = {
         scope: 'scope',
         channel: 'channel',
-        payload: 'text',
+        payload: { text: 'hello', code: 7 },
         level: 'info',
     } satisfies Message;
-    const binary = {
+    const symbolPayload = {
         scope: 'scope',
         channel: 'channel',
-        payload: new Uint8Array([1, 2, 3]).buffer,
+        payload: Symbol.for('payload'),
         level: 'debug',
     } satisfies Message;
 
-    t.notThrows(() => exporter.monolith(unicode));
-    t.notThrows(() => exporter.stream(binary));
+    t.notThrows(() => exporter.monolith(structured));
+    t.notThrows(() => exporter.stream(symbolPayload));
 });
 
 test.serial('level presets expose expected ordering and environment map', (t) => {
