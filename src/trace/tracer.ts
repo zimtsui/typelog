@@ -36,6 +36,34 @@ export namespace Tracer {
             return this.stack.getFrames();
         }
 
+        public *hookSync<TYield, TReturn, TNext>(
+            name: string,
+            generator: Generator<TYield, TReturn, TNext>,
+        ): Generator<TYield, TReturn, TNext> {
+            let r = this.forkSync(name, () => generator.next());
+            while (!r.done) try {
+                const input = yield r.value;
+                r = this.forkSync(name, () => generator.next(input));
+            } catch (e) {
+                r = this.forkSync(name, () => generator.throw(e));
+            }
+            return r.value;
+        }
+
+        public async *hookAsync<TYield, TReturn, TNext>(
+            name: string,
+            generator: AsyncGenerator<TYield, TReturn, TNext>,
+        ): AsyncGenerator<TYield, TReturn, TNext> {
+            let r = await this.forkAsync(name, () => generator.next());
+            while (!r.done) try {
+                const input = yield r.value;
+                r = await this.forkAsync(name, () => generator.next(input));
+            } catch (e) {
+                r = await this.forkAsync(name, () => generator.throw(e));
+            }
+            return r.value;
+        }
+
         protected createSync<R>(name: string, f: () => R, masterContext: OTEL.Context): R {
             const slaveSpan = this.tracer.startSpan(name, {}, masterContext);
             const slaveContext = OTEL.trace.setSpan(masterContext, slaveSpan);
