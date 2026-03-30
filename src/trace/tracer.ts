@@ -46,7 +46,10 @@ export namespace Tracer {
             try {
                 return await OTEL.context.with(slaveContext, f);
             } catch (e) {
-                if (e instanceof Error) slaveSpan.recordException(e);
+                if (e instanceof Error) {
+                    slaveSpan.recordException(e);
+                    Stack.append(e, name);
+                }
                 slaveSpan.setStatus({ code: OTEL.SpanStatusCode.ERROR });
                 throw e;
             } finally {

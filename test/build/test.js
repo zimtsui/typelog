@@ -1,0 +1,313 @@
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+import test from 'ava';
+import * as OTEL from '@opentelemetry/api';
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
+import { InMemorySpanExporter, NodeTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-node';
+import { Channel, Exporter } from '../../build/log/exports.js';
+import * as Presets from '../../build/log/presets/level.js';
+import { Tracer } from '../../build/trace/exports.js';
+import * as Stack from '../../build/trace/stack.js';
+var NumericLevel;
+(function (NumericLevel) {
+    NumericLevel[NumericLevel["debug"] = 0] = "debug";
+    NumericLevel[NumericLevel["info"] = 1] = "info";
+    NumericLevel[NumericLevel["warn"] = 2] = "warn";
+})(NumericLevel || (NumericLevel = {}));
+function useTracerProvider() {
+    const exporter = new InMemorySpanExporter();
+    const provider = new NodeTracerProvider({
+        spanProcessors: [new SimpleSpanProcessor(exporter)],
+    });
+    const contextManager = new AsyncLocalStorageContextManager();
+    OTEL.trace.disable();
+    OTEL.context.disable();
+    OTEL.propagation.disable();
+    provider.register({ contextManager, propagator: null });
+    return {
+        exporter,
+        async cleanup() {
+            await provider.shutdown();
+            OTEL.context.disable();
+            OTEL.trace.disable();
+            OTEL.propagation.disable();
+        },
+    };
+}
+test.afterEach.always(() => {
+    Exporter.setGlobalExporter(new Exporter.Noop());
+    OTEL.context.disable();
+    OTEL.trace.disable();
+    OTEL.propagation.disable();
+});
+test.serial('Channel.create routes messages by level name', (t) => {
+    const calls = [];
+    const channel = Channel.create(NumericLevel, (message, level) => {
+        calls.push({ message, level });
+    });
+    channel.debug('first');
+    channel.warn('second');
+    t.deepEqual(calls, [
+        { message: 'first', level: NumericLevel.debug },
+        { message: 'second', level: NumericLevel.warn },
+    ]);
+});
+test.serial('Channel.create rejects unknown properties', (t) => {
+    const channel = Channel.create(NumericLevel, () => { });
+    const error = t.throws(() => Reflect.get(channel, 'missing'));
+    t.true(error instanceof Error);
+});
+test.serial('Exporter global instance is configurable', (t) => {
+    const exporter = {
+        monolith() { },
+        stream() { },
+    };
+    Exporter.setGlobalExporter(exporter);
+    t.is(Exporter.getGlobalExporter(), exporter);
+});
+test.serial('Exporter.Noop accepts both export methods', (t) => {
+    const exporter = new Exporter.Noop();
+    const unicode = {
+        scope: 'scope',
+        channel: 'channel',
+        payload: 'text',
+        level: 'info',
+    };
+    const binary = {
+        scope: 'scope',
+        channel: 'channel',
+        payload: new Uint8Array([1, 2, 3]).buffer,
+        level: 'debug',
+    };
+    t.notThrows(() => exporter.monolith(unicode));
+    t.notThrows(() => exporter.stream(binary));
+});
+test.serial('level presets expose expected ordering and environment map', (t) => {
+    t.is(Presets.Level.trace, 0);
+    t.true(Presets.Level.trace < Presets.Level.debug);
+    t.true(Presets.Level.error < Presets.Level.critical);
+    t.is(Presets.envlevels.debug, Presets.Level.trace);
+    t.is(Presets.envlevels.development, Presets.Level.debug);
+    t.is(Presets.envlevels.production, Presets.Level.warn);
+});
+test.serial('Stack stores appended names per error instance', (t) => {
+    const a = new Error('a');
+    const b = new Error('b');
+    Stack.append(a, 'first');
+    Stack.append(a, 'second');
+    Stack.append(b, 'other');
+    t.deepEqual(Stack.read(a), ['first', 'second']);
+    t.deepEqual(Stack.read(b), ['other']);
+    t.deepEqual(Stack.read(new Error('c')), []);
+});
+test.serial('Tracer.spawnSync creates a root span and returns callback result', async (t) => {
+    const { exporter, cleanup } = useTracerProvider();
+    const tracer = Tracer.create('scope', '1.0.0');
+    try {
+        const value = tracer.spawnSync('root-sync', () => {
+            const activeSpan = OTEL.trace.getActiveSpan();
+            t.truthy(activeSpan);
+            t.is(activeSpan?.spanContext().traceFlags, 1);
+            return 42;
+        });
+        await Promise.resolve();
+        const spans = exporter.getFinishedSpans();
+        t.is(value, 42);
+        t.is(spans.length, 1);
+        t.is(spans[0]?.name, 'root-sync');
+        t.is(spans[0]?.parentSpanContext, undefined);
+    }
+    finally {
+        await cleanup();
+    }
+});
+test.serial('Tracer.forkSync creates a child span from the active context', async (t) => {
+    const { exporter, cleanup } = useTracerProvider();
+    const tracer = Tracer.create('scope');
+    try {
+        tracer.spawnSync('parent', () => {
+            tracer.forkSync('child', () => { });
+        });
+        await Promise.resolve();
+        const spans = exporter.getFinishedSpans();
+        const parent = spans.find((span) => span.name === 'parent');
+        const child = spans.find((span) => span.name === 'child');
+        t.truthy(parent);
+        t.truthy(child);
+        t.is(child?.parentSpanContext?.spanId, parent?.spanContext().spanId);
+        t.is(child?.spanContext().traceId, parent?.spanContext().traceId);
+    }
+    finally {
+        await cleanup();
+    }
+});
+test.serial('Tracer.createSync records errors and appends stack names', async (t) => {
+    const { exporter, cleanup } = useTracerProvider();
+    const tracer = Tracer.create('scope');
+    const error = new Error('boom');
+    try {
+        const thrown = t.throws(() => tracer.spawnSync('failing-sync', () => {
+            throw error;
+        }));
+        await Promise.resolve();
+        const [span] = exporter.getFinishedSpans();
+        t.is(thrown, error);
+        t.deepEqual(Stack.read(error), ['failing-sync']);
+        t.is(span?.status.code, OTEL.SpanStatusCode.ERROR);
+        t.is(span?.events[0]?.name, 'exception');
+    }
+    finally {
+        await cleanup();
+    }
+});
+test.serial('Tracer.spawnAsync creates a root span for awaited work', async (t) => {
+    const { exporter, cleanup } = useTracerProvider();
+    const tracer = Tracer.create('scope');
+    try {
+        const value = await tracer.spawnAsync('root-async', async () => {
+            await Promise.resolve();
+            t.truthy(OTEL.trace.getActiveSpan());
+            return 'done';
+        });
+        await Promise.resolve();
+        const [span] = exporter.getFinishedSpans();
+        t.is(value, 'done');
+        t.is(span?.name, 'root-async');
+        t.is(span?.parentSpanContext, undefined);
+    }
+    finally {
+        await cleanup();
+    }
+});
+test.serial('Tracer.forkAsync creates a child span across async boundaries', async (t) => {
+    const { exporter, cleanup } = useTracerProvider();
+    const tracer = Tracer.create('scope');
+    try {
+        await tracer.spawnAsync('parent-async', async () => {
+            await Promise.resolve();
+            await tracer.forkAsync('child-async', async () => {
+                await Promise.resolve();
+            });
+        });
+        await Promise.resolve();
+        const spans = exporter.getFinishedSpans();
+        const parent = spans.find((span) => span.name === 'parent-async');
+        const child = spans.find((span) => span.name === 'child-async');
+        t.truthy(parent);
+        t.truthy(child);
+        t.is(child?.parentSpanContext?.spanId, parent?.spanContext().spanId);
+    }
+    finally {
+        await cleanup();
+    }
+});
+test.serial('Tracer.createAsync records errors without mutating custom stack map', async (t) => {
+    const { exporter, cleanup } = useTracerProvider();
+    const tracer = Tracer.create('scope');
+    const error = new Error('async boom');
+    try {
+        const thrown = await t.throwsAsync(async () => tracer.spawnAsync('failing-async', async () => {
+            await Promise.resolve();
+            throw error;
+        }));
+        await Promise.resolve();
+        const [span] = exporter.getFinishedSpans();
+        t.is(thrown, error);
+        t.deepEqual(Stack.read(error), []);
+        t.is(span?.status.code, OTEL.SpanStatusCode.ERROR);
+        t.is(span?.events[0]?.name, 'exception');
+    }
+    finally {
+        await cleanup();
+    }
+});
+test.serial('forked decorators preserve method name and create child spans', async (t) => {
+    const { exporter, cleanup } = useTracerProvider();
+    const tracer = Tracer.create('scope');
+    try {
+        class Service {
+            compute(x) {
+                return x + 1;
+            }
+            async load(x) {
+                await Promise.resolve();
+                return x + 2;
+            }
+        }
+        __decorate([
+            tracer.forkedSync()
+        ], Service.prototype, "compute", null);
+        __decorate([
+            tracer.forkedAsync()
+        ], Service.prototype, "load", null);
+        const service = new Service();
+        let syncName = '';
+        let asyncName = '';
+        let result = 0;
+        await tracer.spawnAsync('decorator-parent', async () => {
+            syncName = service.compute.name;
+            result += service.compute(1);
+            asyncName = service.load.name;
+            result += await service.load(2);
+        });
+        await Promise.resolve();
+        const spans = exporter.getFinishedSpans();
+        const syncSpan = spans.find((span) => span.name === 'compute');
+        const asyncSpan = spans.find((span) => span.name === 'load');
+        const parent = spans.find((span) => span.name === 'decorator-parent');
+        t.is(syncName, 'compute');
+        t.is(asyncName, 'load');
+        t.is(result, 6);
+        t.truthy(syncSpan);
+        t.truthy(asyncSpan);
+        t.is(syncSpan?.parentSpanContext?.spanId, parent?.spanContext().spanId);
+        t.is(asyncSpan?.parentSpanContext?.spanId, parent?.spanContext().spanId);
+    }
+    finally {
+        await cleanup();
+    }
+});
+test.serial('spawned decorators create root spans and allow custom names', async (t) => {
+    const { exporter, cleanup } = useTracerProvider();
+    const tracer = Tracer.create('scope');
+    try {
+        class Service {
+            compute() {
+                return 'sync';
+            }
+            async load() {
+                await Promise.resolve();
+                return 'async';
+            }
+        }
+        __decorate([
+            tracer.spawnedSync('custom-sync')
+        ], Service.prototype, "compute", null);
+        __decorate([
+            tracer.spawnedAsync('custom-async')
+        ], Service.prototype, "load", null);
+        const service = new Service();
+        const sync = service.compute();
+        const asyncValue = await service.load();
+        await Promise.resolve();
+        const spans = exporter.getFinishedSpans();
+        const syncSpan = spans.find((span) => span.name === 'custom-sync');
+        const asyncSpan = spans.find((span) => span.name === 'custom-async');
+        t.is(sync, 'sync');
+        t.is(asyncValue, 'async');
+        t.truthy(syncSpan);
+        t.truthy(asyncSpan);
+        t.is(syncSpan?.parentSpanContext, undefined);
+        t.is(asyncSpan?.parentSpanContext, undefined);
+        t.is(service.compute.name, 'compute');
+        t.is(service.load.name, 'load');
+    }
+    finally {
+        await cleanup();
+    }
+});
+//# sourceMappingURL=test.js.map
