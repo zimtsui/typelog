@@ -10,7 +10,7 @@ Typelemetry is a strongly typed telemetry library for TypeScript.
 classDiagram
 
 TypelemetryLog <|-- TypelemetryLogPresets
-TypelemetryLogPresets o--> TypelemetryLogPresets.Exporter
+TypelemetryLog o--> TypelemetryLog.Exporter
 TypelemetryTrace o--> OtelTraceApi
 OtelTraceApi <--o OtelApi
 OtelMetricsApi <--o OtelApi
