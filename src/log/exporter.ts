@@ -1,19 +1,10 @@
 
 
-export type Message = Message.Unicode | Message.Binary;
-export namespace Message {
-    export interface Binary {
-        scope: string;
-        channel: string;
-        payload: ArrayBuffer;
-        level: string;
-    }
-    export interface Unicode {
-        scope: string;
-        channel: string;
-        payload: string;
-        level: string;
-    }
+export interface Message {
+    scope: string;
+    channel: string;
+    payload: unknown;
+    level: string;
 }
 
 export interface Exporter {
