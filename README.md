@@ -2,14 +2,15 @@
 
 [![NPM Version](https://img.shields.io/npm/v/@zimtsui/typelemetry?style=flat-square)](https://www.npmjs.com/package/@zimtsui/typelemetry)
 
-TypeLog is a strongly typed logger for concurrent TypeScript programs.
+Typelemetry is a strongly typed telemetry library for TypeScript.
 
 ## Architecture
 
 ```mermaid
 classDiagram
 
-TypelemetryLog o--> TypelemetryTrace
+TypelemetryLog <|-- TypelemetryLogPresets
+TypelemetryLogPresets o--> TypelemetryLogPresets.Exporter
 TypelemetryTrace o--> OtelTraceApi
 OtelTraceApi <--o OtelApi
 OtelMetricsApi <--o OtelApi
@@ -18,77 +19,6 @@ OtelApi <|-- OtelSdk
 ```
 
 Until now (2026-03), OpenTelemetry Log API has no stable release yet.
-
-## Channel
-
-```ts
-import { Channel, type LogEventTarget, LogEvent } from '@zimtsui/typelemetry';
-
-// Declare all log levels whose values are sorted from verbose to severe.
-enum Level { trace, debug, info, warn, error }
-
-// Declare log levels for different environments.
-const envlevels: Record<string, Level> = {
-	debug: Level.trace,
-	development: Level.debug,
-	production: Level.warn,
-};
-
-// Determine the log level according to the environment variable.
-declare const ENV: string;
-const envLevel = envlevels[ENV] ?? Level.info;
-
-// Create an event target for listening to log events.
-type channelMap = {
-    symbolChannelEventType: [typeof Level, payloadType: symbol];
-    numberChannelEventType: [typeof Level, payloadType: number];
-};
-const eventTarget = new EventTarget() as LogEventTarget<channelMap>;
-eventTarget.addEventListener(
-    'numberChannelEventType',
-    (evt: LogEvent<'numberChannelEventType', typeof Level, number>) => {
-        if (evt.level >= envLevel) console.log(evt.detail satisfies number);
-    },
-);
-eventTarget.addEventListener(
-    'symbolChannelEventType',
-    (evt: LogEvent<'symbolChannelEventType', typeof Level, symbol>) => {
-        if (evt.level >= envLevel) console.log(evt.detail satisfies symbol);
-    },
-);
-
-// Create loggers.
-const logger = {
-    symbolChannel: Channel.attach<channelMap, 'symbolChannelEventType'>(eventTarget, 'symbolChannelEventType', Level),
-    numberChannel: Channel.attach<channelMap, 'numberChannelEventType'>(eventTarget, 'numberChannelEventType', Level),
-	stringChannel: Channel.create<typeof Level, string>(Level, (message, level) => {
-		if (level >= envLevel) console.log(message);
-	}),
-};
-
-// Use loggers.
-logger.symbolChannel.info(Symbol('Hello, world!'));
-logger.numberChannel.warn(10086);
-logger.stringChannel.trace('Hello, world!');
-```
-
-## Level presets
-
-```ts
-import { Channel } from '@zimtsui/typelemetry';
-import * as Presets from '@zimtsui/typelemetry/presets';
-import { env, stderr } from 'node:process';
-import { formatWithOptions } from 'node:util';
-
-const envLevel = Presets.envlevels[env.NODE_ENV ?? ''] ?? Presets.Level.info;
-
-export const channel = Channel.create(
-	Presets.Level,
-	(message, level) => {
-		if (level >= envLevel) console.error(formatWithOptions({ depth: null, colors: !!stderr.isTTY }, message));
-	},
-);
-```
 
 ## Trace
 
@@ -139,38 +69,81 @@ console.log(await f1(100));
 await sdk.shutdown();
 ```
 
-## Fallback of OpenTelemetry Node.js SDK
-
-OpenTelemetry Node.js Log SDK has no stable release yet. Typelog provides a fallback implementation.
+## Log
 
 ```ts
-import { Exporter } from '@zimtsui/typelemetry/exporter';
-import * as Presets from '@zimtsui/typelemetry/presets';
-import { Channel } from '@zimtsui/typelemetry';
-import { formatWithOptions } from 'node:util';
+import { Channel, Exporter } from '@zimtsui/typelemetry/log';
 import { stderr } from 'node:process';
 
-const exporter: Exporter = {
-    monolith: ({ payload }) => {
-        console.error(formatWithOptions({ depth: null, colors: !!stderr.isTTY }, payload));
-    },
-    stream: () => {},
+// Declare all log levels whose values are sorted from verbose to severe.
+enum Level { trace, debug, info, warn, error }
+
+// Declare log levels for different environments.
+const envlevels: Record<string, Level> = {
+	debug: Level.trace,
+	development: Level.debug,
+	production: Level.warn,
 };
 
-Exporter.setGlobalExporter(exporter);
+// Determine the log level according to the environment variable.
+declare const ENV: string;
+const envLevel = envlevels[ENV] ?? Level.info;
 
-const channel = Channel.create(
+// Create exporters.
+const consoleExporter: Exporter = {
+    monolith(message) {
+        if (typeof message.payload === 'string') {
+            console.log(message.level);
+            console.log(message.payload);
+        }
+    },
+    stream(chunk) {
+        if (typeof chunk.payload === 'string') {
+            stderr.write(chunk.payload);
+        }
+    },
+};
+Exporter.setGlobalExporter(consoleExporter);
+
+// Create loggers.
+const logger = {
+	number: Channel.create<typeof Level, number>(Level, (message, level) => {
+		if (level >= envLevel) Exporter.getGlobalExporter().monolith({
+            scope: 'main',
+            level: Level[level],
+            payload: message,
+            channel: 'number',
+        });
+	}),
+	string: Channel.create<typeof Level, string>(Level, (message, level) => {
+		if (level >= envLevel) Exporter.getGlobalExporter().monolith({
+            scope: 'main',
+            level: Level[level],
+            payload: message,
+            channel: 'string',
+        });
+	}),
+};
+
+// Use loggers.
+logger.string.info('Hello');
+logger.number.warn(10086);
+```
+
+### Level presets
+
+```ts
+import { Channel } from '@zimtsui/typelemetry/log';
+import * as Presets from '@zimtsui/typelemetry/log/presets';
+import { env, stderr } from 'node:process';
+import { formatWithOptions } from 'node:util';
+
+const envLevel = Presets.envlevels[env.NODE_ENV ?? ''] ?? Presets.Level.info;
+
+export const channel = Channel.create(
 	Presets.Level,
-	(payload, level) => {
-        if (level >= Presets.Level.info)
-            Exporter.getGlobalExporter().monolith({
-                level,
-                scope: 'Example',
-                channel: 'Default',
-                payload,
-            });
+	(message, level) => {
+		if (level >= envLevel) console.error(formatWithOptions({ depth: null, colors: !!stderr.isTTY }, message));
 	},
 );
-
-channel.info('Hello, world!');
 ```

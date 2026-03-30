@@ -4,7 +4,7 @@
   "exports": {
     "./trace": "./build/trace/exports.js",
     "./log": "./build/log/exports.js",
-    "./log/presets": "./build/log/presets/exports.js"
+    "./log/presets": "./build/log/presets/level.js"
   },
   "description": "",
   "type": "module",
@@ -33,7 +33,6 @@
     "failWithoutAssertions": false
   },
   "peerDependencies": {
-    "@opentelemetry/api": "^1.9.0",
-    "@zimtsui/typevent": "^0.0.2"
+    "@opentelemetry/api": "^1.9.0"
   }
 }

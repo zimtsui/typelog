@@ -1,6 +1,5 @@
-import { Exporter } from '@zimtsui/typelemetry/exporter';
-import * as Presets from '@zimtsui/typelemetry/presets';
-import { Channel } from '@zimtsui/typelemetry';
+import { Channel, Exporter } from '@zimtsui/typelemetry/log';
+import * as Presets from '@zimtsui/typelemetry/log/presets';
 import { formatWithOptions } from 'node:util';
 import { stderr } from 'node:process';
 
@@ -18,10 +17,10 @@ const channel = Channel.create(
 	(payload, level) => {
         if (level >= Presets.Level.info)
             Exporter.getGlobalExporter().monolith({
-                level,
                 scope: 'Example',
                 channel: 'Default',
                 payload,
+                level: Presets.Level[level],
             });
 	},
 );

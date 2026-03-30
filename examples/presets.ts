@@ -1,5 +1,5 @@
-import { Channel } from '@zimtsui/typelemetry';
-import * as Presets from '@zimtsui/typelemetry/presets';
+import { Channel } from '@zimtsui/typelemetry/log';
+import * as Presets from '@zimtsui/typelemetry/log/presets';
 import { env, stderr } from 'node:process';
 import { formatWithOptions } from 'node:util';
 
