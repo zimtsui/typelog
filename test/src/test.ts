@@ -235,7 +235,7 @@ test.serial('Tracer.forkAsync creates a child span across async boundaries', asy
     }
 });
 
-test.serial('Tracer.createAsync records errors without mutating custom stack map', async (t) => {
+test.serial('Tracer.createAsync records errors and appends stack names', async (t) => {
     const { exporter, cleanup } = useTracerProvider();
     const tracer = Tracer.create('scope');
     const error = new Error('async boom');
@@ -250,9 +250,41 @@ test.serial('Tracer.createAsync records errors without mutating custom stack map
 
         const [span] = exporter.getFinishedSpans();
         t.is(thrown, error);
-        t.deepEqual(Stack.read(error), []);
+        t.deepEqual(Stack.read(error), ['failing-async']);
         t.is(span?.status.code, OTEL.SpanStatusCode.ERROR);
         t.is(span?.events[0]?.name, 'exception');
+    } finally {
+        await cleanup();
+    }
+});
+
+test.serial('forkedAsync decorator appends stack names when async method throws', async (t) => {
+    const { exporter, cleanup } = useTracerProvider();
+    const tracer = Tracer.create('scope');
+    const error = new Error('decorated async boom');
+
+    try {
+        class Service {
+            @tracer.forkedAsync()
+            public async load(): Promise<void> {
+                await Promise.resolve();
+                throw error;
+            }
+        }
+
+        const service = new Service();
+        const thrown = await t.throwsAsync(async () => tracer.spawnAsync('parent', async () => {
+            await service.load();
+        }));
+
+        await Promise.resolve();
+
+        const spans = exporter.getFinishedSpans();
+        const loadSpan = spans.find((span) => span.name === 'load');
+        t.is(thrown, error);
+        t.deepEqual(Stack.read(error), ['load', 'parent']);
+        t.is(loadSpan?.status.code, OTEL.SpanStatusCode.ERROR);
+        t.is(loadSpan?.events[0]?.name, 'exception');
     } finally {
         await cleanup();
     }
