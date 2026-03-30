@@ -5,7 +5,8 @@ import { InMemorySpanExporter, NodeTracerProvider, SimpleSpanProcessor } from '@
 import { Channel, Exporter } from '../../build/log/exports.js';
 import type { Message } from '../../build/log/exporter.js';
 import * as Presets from '../../build/log/presets/level.js';
-import { Stack, Tracer } from '../../build/trace/exports.js';
+import { Stack } from '../../build/trace/stack.js';
+import { Tracer } from '../../build/trace/tracer.js';
 
 enum NumericLevel {
     debug,
@@ -103,32 +104,33 @@ test.serial('level presets expose expected ordering and environment map', (t) =>
     t.is(Presets.envlevels.production, Presets.Level.warn);
 });
 
-test.serial('Stack prepends names per error instance', (t) => {
-    const a = new Error('a');
-    const b = new Error('b');
+test.serial('Stack tracks nested frames and current frame', async (t) => {
+    const stack = new Stack();
 
-    Stack.prepend(a, 'first');
-    Stack.prepend(a, 'second');
-    Stack.prepend(b, 'other');
+    t.deepEqual(stack.getFrames(), []);
+    t.is(stack.getFrame(), undefined);
 
-    t.deepEqual(Stack.read(a), ['second', 'first']);
-    t.deepEqual(Stack.read(b), ['other']);
-    t.deepEqual(Stack.read(new Error('c')), []);
-});
+    const outer = stack.run('outer', () => {
+        t.deepEqual(stack.getFrames(), [{ name: 'outer', attrs: {} }]);
+        t.deepEqual(stack.getFrame(), { name: 'outer', attrs: {} });
 
-test.serial('Stack.run exposes the current nested stack through Stack.now', async (t) => {
-    t.deepEqual(Stack.now(), []);
-
-    const outer = Stack.run(() => {
-        t.deepEqual(Stack.now(), ['outer']);
-        return Stack.run(async () => {
+        return stack.run('inner', async () => {
             await Promise.resolve();
-            return Stack.now();
-        }, 'inner');
-    }, 'outer');
+            t.deepEqual(
+                stack.getFrames().map((frame) => frame.name),
+                ['outer', 'inner'],
+            );
+            t.is(stack.getFrame()?.name, 'inner');
+            return stack.getFrames();
+        });
+    });
 
-    t.deepEqual(await outer, ['outer', 'inner']);
-    t.deepEqual(Stack.now(), []);
+    t.deepEqual(
+        (await outer).map((frame) => frame.name),
+        ['outer', 'inner'],
+    );
+    t.deepEqual(stack.getFrames(), []);
+    t.is(stack.getFrame(), undefined);
 });
 
 test.serial('Tracer.spawnSync creates a root span and returns callback result', async (t) => {
@@ -179,7 +181,7 @@ test.serial('Tracer.forkSync creates a child span from the active context', asyn
     }
 });
 
-test.serial('Tracer.createSync records errors and appends stack names', async (t) => {
+test.serial('Tracer.createSync injects extracted frames into errors', async (t) => {
     const { exporter, cleanup } = useTracerProvider();
     const tracer = Tracer.create('scope');
     const error = new Error('boom');
@@ -193,7 +195,7 @@ test.serial('Tracer.createSync records errors and appends stack names', async (t
 
         const [span] = exporter.getFinishedSpans();
         t.is(thrown, error);
-        t.deepEqual(Stack.read(error), ['failing-sync']);
+        t.deepEqual(tracer.extract(error), [{ name: 'failing-sync', attrs: {} }]);
         t.is(span?.status.code, OTEL.SpanStatusCode.ERROR);
         t.is(span?.events[0]?.name, 'exception');
     } finally {
@@ -249,7 +251,7 @@ test.serial('Tracer.forkAsync creates a child span across async boundaries', asy
     }
 });
 
-test.serial('Tracer.createAsync records errors and appends stack names', async (t) => {
+test.serial('Tracer.createAsync injects extracted frames into errors', async (t) => {
     const { exporter, cleanup } = useTracerProvider();
     const tracer = Tracer.create('scope');
     const error = new Error('async boom');
@@ -264,7 +266,7 @@ test.serial('Tracer.createAsync records errors and appends stack names', async (
 
         const [span] = exporter.getFinishedSpans();
         t.is(thrown, error);
-        t.deepEqual(Stack.read(error), ['failing-async']);
+        t.deepEqual(tracer.extract(error), [{ name: 'failing-async', attrs: {} }]);
         t.is(span?.status.code, OTEL.SpanStatusCode.ERROR);
         t.is(span?.events[0]?.name, 'exception');
     } finally {
@@ -272,7 +274,7 @@ test.serial('Tracer.createAsync records errors and appends stack names', async (
     }
 });
 
-test.serial('forkedAsync decorator appends stack names when async method throws', async (t) => {
+test.serial('forkedAsync decorator injects nested frames when async method throws', async (t) => {
     const { exporter, cleanup } = useTracerProvider();
     const tracer = Tracer.create('scope');
     const error = new Error('decorated async boom');
@@ -296,9 +298,71 @@ test.serial('forkedAsync decorator appends stack names when async method throws'
         const spans = exporter.getFinishedSpans();
         const loadSpan = spans.find((span) => span.name === 'load');
         t.is(thrown, error);
-        t.deepEqual(Stack.read(error), ['parent', 'load']);
+        t.deepEqual(
+            tracer.extract(error).map((frame) => frame.name),
+            ['parent', 'load'],
+        );
         t.is(loadSpan?.status.code, OTEL.SpanStatusCode.ERROR);
         t.is(loadSpan?.events[0]?.name, 'exception');
+    } finally {
+        await cleanup();
+    }
+});
+
+test.serial('Tracer.setAttr writes to the active span and extracted frames', async (t) => {
+    const { exporter, cleanup } = useTracerProvider();
+    const tracer = Tracer.create('scope');
+    const error = new Error('attr boom');
+
+    try {
+        const thrown = t.throws(() => tracer.spawnSync('outer', () => {
+            tracer.setAttr('request.id', 'r1');
+            return tracer.forkSync('inner', () => {
+                tracer.setAttr('user.id', 7);
+                throw error;
+            });
+        }));
+
+        await Promise.resolve();
+
+        const spans = exporter.getFinishedSpans();
+        const outerSpan = spans.find((span) => span.name === 'outer');
+        const innerSpan = spans.find((span) => span.name === 'inner');
+
+        t.is(thrown, error);
+        t.deepEqual(tracer.extract(error), [
+            { name: 'outer', attrs: { 'request.id': 'r1' } },
+            { name: 'inner', attrs: { 'user.id': 7 } },
+        ]);
+        t.is(outerSpan?.attributes['request.id'], 'r1');
+        t.is(innerSpan?.attributes['user.id'], 7);
+    } finally {
+        await cleanup();
+    }
+});
+
+test.serial('Tracer.getFrames exposes the current nested frame stack', async (t) => {
+    const { cleanup } = useTracerProvider();
+    const tracer = Tracer.create('scope');
+
+    try {
+        t.deepEqual(tracer.getFrames(), []);
+
+        const names = await tracer.spawnAsync('outer', async () => {
+            tracer.setAttr('outer.attr', true);
+            return tracer.forkAsync('inner', async () => {
+                await Promise.resolve();
+                const frames = tracer.getFrames();
+                t.deepEqual(frames, [
+                    { name: 'outer', attrs: { 'outer.attr': true } },
+                    { name: 'inner', attrs: {} },
+                ]);
+                return frames.map((frame) => frame.name);
+            });
+        });
+
+        t.deepEqual(names, ['outer', 'inner']);
+        t.deepEqual(tracer.getFrames(), []);
     } finally {
         await cleanup();
     }
