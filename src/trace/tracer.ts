@@ -32,7 +32,7 @@ export namespace Tracer {
             return this.injection.read(e);
         }
 
-        public now(): Frame[] {
+        public getFrames(): Frame[] {
             return this.stack.getFrames();
         }
 
