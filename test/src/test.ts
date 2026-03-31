@@ -2,9 +2,9 @@ import test from 'ava';
 import * as OTEL from '@opentelemetry/api';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import { InMemorySpanExporter, NodeTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-node';
-import { Channel, Exporter } from '../../build/log/exports.js';
-import type { Message } from '../../build/log/exporter.js';
-import * as Presets from '../../build/log/presets/level.js';
+import { Channel } from '../../build/log/exports.js';
+import type { Exporter as GenericExporter, Message } from '../../build/log/exporter.js';
+import * as Presets from '../../build/log/presets/exports.js';
 import { Stack } from '../../build/trace/stack.js';
 import { Tracer } from '../../build/trace/tracer.js';
 
@@ -37,7 +37,7 @@ function useTracerProvider() {
 }
 
 test.afterEach.always(() => {
-    Exporter.setGlobalExporter(new Exporter.Noop());
+    Presets.Exporter.setGlobalExporter(new Presets.Exporter.Noop());
     OTEL.context.disable();
     OTEL.trace.disable();
     OTEL.propagation.disable();
@@ -65,43 +65,44 @@ test.serial('Channel.create rejects unknown properties', (t) => {
     t.true(error instanceof Error);
 });
 
-test.serial('Exporter global instance is configurable', (t) => {
-    const exporter: Exporter = {
+test.serial('preset Exporter global instance is configurable', (t) => {
+    const exporter: GenericExporter<typeof Presets.Level> = {
         monolith() {},
         stream() {},
     };
 
-    Exporter.setGlobalExporter(exporter);
+    Presets.Exporter.setGlobalExporter(exporter);
 
-    t.is(Exporter.getGlobalExporter(), exporter);
+    t.is(Presets.Exporter.getGlobalExporter(), exporter);
 });
 
-test.serial('Exporter.Noop accepts arbitrary message payloads', (t) => {
-    const exporter: Exporter = new Exporter.Noop();
+test.serial('preset Exporter.Noop accepts arbitrary message payloads', (t) => {
+    const exporter: GenericExporter<typeof Presets.Level> = new Presets.Exporter.Noop();
     const structured = {
         scope: 'scope',
         channel: 'channel',
         payload: { text: 'hello', code: 7 },
-        level: 'info',
-    } satisfies Message;
+        level: Presets.Level.info,
+    } satisfies Message<typeof Presets.Level>;
     const symbolPayload = {
         scope: 'scope',
         channel: 'channel',
         payload: Symbol.for('payload'),
-        level: 'debug',
-    } satisfies Message;
+        level: Presets.Level.debug,
+    } satisfies Message<typeof Presets.Level>;
 
     t.notThrows(() => exporter.monolith(structured));
     t.notThrows(() => exporter.stream(symbolPayload));
 });
 
-test.serial('level presets expose expected ordering and environment map', (t) => {
+test.serial('level presets barrel exposes expected ordering, environment map, and exporter namespace', (t) => {
     t.is(Presets.Level.trace, 0);
     t.true(Presets.Level.trace < Presets.Level.debug);
     t.true(Presets.Level.error < Presets.Level.critical);
     t.is(Presets.envlevels.debug, Presets.Level.trace);
     t.is(Presets.envlevels.development, Presets.Level.debug);
     t.is(Presets.envlevels.production, Presets.Level.warn);
+    t.true(Presets.Exporter.getGlobalExporter() instanceof Presets.Exporter.Noop);
 });
 
 test.serial('Stack tracks nested frames and current frame', async (t) => {

@@ -1,29 +1,14 @@
+import { LevelEnum } from './level.ts';
 
 
-export interface Message {
+export interface Message<levelEnum extends LevelEnum.Prototype> {
     scope: string;
     channel: string;
     payload: unknown;
-    level: string;
+    level: LevelEnum.Level<levelEnum>;
 }
 
-export interface Exporter {
-    monolith(message: Message): void;
-    stream(message: Message): void;
-}
-
-export namespace Exporter {
-    export class Noop implements Exporter {
-        public monolith() {}
-        public stream() {}
-    }
-    let globalExporter: Exporter = new Noop();
-
-    export function setGlobalExporter(exporter: Exporter) {
-        globalExporter = exporter;
-    }
-
-    export function getGlobalExporter(): Exporter {
-        return globalExporter;
-    }
+export interface Exporter<levelEnum extends LevelEnum.Prototype> {
+    monolith(message: Message<levelEnum>): void;
+    stream(message: Message<levelEnum>): void;
 }

@@ -4,7 +4,7 @@
   "exports": {
     "./trace": "./build/trace/tracer.js",
     "./log": "./build/log/exports.js",
-    "./log/presets": "./build/log/presets/level.js"
+    "./log/presets": "./build/log/presets/exports.js"
   },
   "description": "",
   "type": "module",
