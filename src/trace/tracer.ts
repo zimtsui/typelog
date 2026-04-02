@@ -42,14 +42,15 @@ export namespace Tracer {
         public *hookSync<TYield, TReturn, TNext>(
             name: string,
             generator: Generator<TYield, TReturn, TNext>,
+            attrs: Record<string, OTEL.AttributeValue> = {},
         ): Generator<TYield, TReturn, TNext> {
             try {
-                let r = this.forkSync(name, () => generator.next());
+                let r = this.forkSync(name, () => generator.next(), attrs);
                 while (!r.done) try {
                     const input = yield r.value;
-                    r = this.forkSync(name, () => generator.next(input));
+                    r = this.forkSync(name, () => generator.next(input), attrs);
                 } catch (e) {
-                    r = this.forkSync(name, () => generator.throw(e));
+                    r = this.forkSync(name, () => generator.throw(e), attrs);
                 }
                 return r.value;
             } finally {
@@ -63,14 +64,15 @@ export namespace Tracer {
         public async *hookAsync<TYield, TReturn, TNext>(
             name: string,
             generator: AsyncGenerator<TYield, TReturn, TNext>,
+            attrs: Record<string, OTEL.AttributeValue> = {},
         ): AsyncGenerator<TYield, TReturn, TNext> {
             try {
-                let r = await this.forkAsync(name, () => generator.next());
+                let r = await this.forkAsync(name, () => generator.next(), attrs);
                 while (!r.done) try {
                     const input = yield r.value;
-                    r = await this.forkAsync(name, () => generator.next(input));
+                    r = await this.forkAsync(name, () => generator.next(input), attrs);
                 } catch (e) {
-                    r = await this.forkAsync(name, () => generator.throw(e));
+                    r = await this.forkAsync(name, () => generator.throw(e), attrs);
                 }
                 return r.value;
             } finally {
@@ -78,8 +80,11 @@ export namespace Tracer {
             }
         }
 
-        protected createSync<R>(name: string, f: () => R, masterContext: OTEL.Context): R {
-            const slaveSpan = this.tracer.startSpan(name, {}, masterContext);
+        protected createSync<R>(
+            name: string, f: () => R, masterContext: OTEL.Context,
+            attrs: Record<string, OTEL.AttributeValue> = {},
+        ): R {
+            const slaveSpan = this.tracer.startSpan(name, { attributes: attrs }, masterContext);
             const slaveContext = OTEL.trace.setSpan(masterContext, slaveSpan);
             return this.stack.run(
                 name,
@@ -102,8 +107,11 @@ export namespace Tracer {
         /**
          * @param f is allowed to throw synchronously.
          */
-        protected async createAsync<R>(name: string, f: () => PromiseLike<R>, masterContext: OTEL.Context): Promise<Awaited<R>> {
-            const slaveSpan = this.tracer.startSpan(name, {}, masterContext);
+        protected async createAsync<R>(
+            name: string, f: () => PromiseLike<R>, masterContext: OTEL.Context,
+            attrs: Record<string, OTEL.AttributeValue> = {},
+        ): Promise<Awaited<R>> {
+            const slaveSpan = this.tracer.startSpan(name, { attributes: attrs }, masterContext);
             const slaveContext = OTEL.trace.setSpan(masterContext, slaveSpan);
             return await this.stack.run(
                 name,
@@ -124,24 +132,36 @@ export namespace Tracer {
             );
         }
 
-        public spawnSync<R>(name: string, f: () => R): R {
-            return this.createSync(name, f, OTEL.ROOT_CONTEXT);
+        public spawnSync<R>(
+            name: string, f: () => R,
+            attrs: Record<string, OTEL.AttributeValue> = {},
+        ): R {
+            return this.createSync(name, f, OTEL.ROOT_CONTEXT, attrs);
         }
         /**
          * @param f is allowed to throw synchronously.
          */
-        public spawnAsync<R>(name: string, f: () => PromiseLike<R>): Promise<Awaited<R>> {
-            return this.createAsync(name, f, OTEL.ROOT_CONTEXT);
+        public spawnAsync<R>(
+            name: string, f: () => PromiseLike<R>,
+            attrs: Record<string, OTEL.AttributeValue> = {},
+        ): Promise<Awaited<R>> {
+            return this.createAsync(name, f, OTEL.ROOT_CONTEXT, attrs);
         }
 
-        public forkSync<R>(name: string, f: () => R): R {
-            return this.createSync(name, f, OTEL.context.active());
+        public forkSync<R>(
+            name: string, f: () => R,
+            attrs: Record<string, OTEL.AttributeValue> = {},
+        ): R {
+            return this.createSync(name, f, OTEL.context.active(), attrs);
         }
         /**
          * @param f is allowed to throw synchronously.
          */
-        public forkAsync<R>(name: string, f: () => PromiseLike<R>): Promise<Awaited<R>> {
-            return this.createAsync(name, f, OTEL.context.active());
+        public forkAsync<R>(
+            name: string, f: () => PromiseLike<R>,
+            attrs: Record<string, OTEL.AttributeValue> = {},
+        ): Promise<Awaited<R>> {
+            return this.createAsync(name, f, OTEL.context.active(), attrs);
         }
 
         public forkedSync<R>(name?: string) {
