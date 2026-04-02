@@ -226,6 +226,34 @@ test.serial('Tracer.spawnAsync creates a root span for awaited work', async (t) 
     }
 });
 
+test.serial('Tracer spawn and fork apply initial attributes to created spans', async (t) => {
+    const { exporter, cleanup } = useTracerProvider();
+    const tracer = Tracer.create('scope');
+
+    try {
+        await tracer.spawnAsync('root-with-attrs', async () => {
+            await tracer.forkAsync('child-with-attrs', async () => {
+                await Promise.resolve();
+            }, { 'child.kind': 'worker', 'child.index': 2 });
+        }, { 'root.kind': 'entry', 'root.index': 1 });
+
+        await Promise.resolve();
+
+        const spans = exporter.getFinishedSpans();
+        const root = spans.find((span) => span.name === 'root-with-attrs');
+        const child = spans.find((span) => span.name === 'child-with-attrs');
+
+        t.truthy(root);
+        t.truthy(child);
+        t.is(root?.attributes['root.kind'], 'entry');
+        t.is(root?.attributes['root.index'], 1);
+        t.is(child?.attributes['child.kind'], 'worker');
+        t.is(child?.attributes['child.index'], 2);
+    } finally {
+        await cleanup();
+    }
+});
+
 test.serial('Tracer.forkAsync creates a child span across async boundaries', async (t) => {
     const { exporter, cleanup } = useTracerProvider();
     const tracer = Tracer.create('scope');
@@ -499,6 +527,53 @@ test.serial('Tracer.hookSync resumes a generator inside forked spans', async (t)
             { input: 'value' },
             { error: 'boom' },
         ]);
+    } finally {
+        await cleanup();
+    }
+});
+
+test.serial('Tracer.hookSync and hookAsync apply initial attributes on every resumed span', async (t) => {
+    const { exporter, cleanup } = useTracerProvider();
+    const tracer = Tracer.create('scope');
+
+    try {
+        function* syncSource(): Generator<string, string, string> {
+            const first = yield 'sync';
+            return first;
+        }
+
+        async function* asyncSource(): AsyncGenerator<string, string, string> {
+            const first = yield 'async';
+            return first;
+        }
+
+        const hookedSync = tracer.spawnSync(
+            'sync-parent',
+            () => tracer.hookSync('hook-sync-attrs', syncSource(), { 'hook.kind': 'sync' }),
+        );
+        const syncFirst = hookedSync.next();
+        const syncSecond = hookedSync.next('done-sync');
+
+        const hookedAsync = await tracer.spawnAsync(
+            'async-parent',
+            async () => tracer.hookAsync('hook-async-attrs', asyncSource(), { 'hook.kind': 'async' }),
+        );
+        const asyncFirst = await hookedAsync.next();
+        const asyncSecond = await hookedAsync.next('done-async');
+
+        await Promise.resolve();
+
+        const syncSpans = exporter.getFinishedSpans().filter((span) => span.name === 'hook-sync-attrs');
+        const asyncSpans = exporter.getFinishedSpans().filter((span) => span.name === 'hook-async-attrs');
+
+        t.deepEqual(syncFirst, { value: 'sync', done: false });
+        t.deepEqual(syncSecond, { value: 'done-sync', done: true });
+        t.deepEqual(asyncFirst, { value: 'async', done: false });
+        t.deepEqual(asyncSecond, { value: 'done-async', done: true });
+        t.is(syncSpans.length, 2);
+        t.is(asyncSpans.length, 2);
+        t.true(syncSpans.every((span) => span.attributes['hook.kind'] === 'sync'));
+        t.true(asyncSpans.every((span) => span.attributes['hook.kind'] === 'async'));
     } finally {
         await cleanup();
     }
