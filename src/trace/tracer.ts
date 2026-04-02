@@ -89,6 +89,8 @@ export namespace Tracer {
             return this.stack.run(
                 name,
                 () => {
+                    const frame = this.stack.getFrame();
+                    if (frame) frame.attrs = { ...attrs };
                     try {
                         return OTEL.context.with(slaveContext, f);
                     } catch (e) {
@@ -116,6 +118,8 @@ export namespace Tracer {
             return await this.stack.run(
                 name,
                 async () => {
+                    const frame = this.stack.getFrame();
+                    if (frame) frame.attrs = { ...attrs };
                     try {
                         return await OTEL.context.with(slaveContext, f);
                     } catch (e) {

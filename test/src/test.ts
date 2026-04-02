@@ -188,15 +188,19 @@ test.serial('Tracer.createSync injects extracted frames into errors', async (t) 
     const error = new Error('boom');
 
     try {
-        const thrown = t.throws(() => tracer.spawnSync('failing-sync', () => {
-            throw error;
-        }));
+        const thrown = t.throws(() => tracer.spawnSync(
+            'failing-sync',
+            () => {
+                throw error;
+            },
+            { 'request.id': 'sync-1' },
+        ));
 
         await Promise.resolve();
 
         const [span] = exporter.getFinishedSpans();
         t.is(thrown, error);
-        t.deepEqual(tracer.extract(error), [{ name: 'failing-sync', attrs: {} }]);
+        t.deepEqual(tracer.extract(error), [{ name: 'failing-sync', attrs: { 'request.id': 'sync-1' } }]);
         t.is(span?.status.code, OTEL.SpanStatusCode.ERROR);
         t.is(span?.events[0]?.name, 'exception');
     } finally {
@@ -286,16 +290,20 @@ test.serial('Tracer.createAsync injects extracted frames into errors', async (t)
     const error = new Error('async boom');
 
     try {
-        const thrown = await t.throwsAsync(async () => tracer.spawnAsync('failing-async', async () => {
-            await Promise.resolve();
-            throw error;
-        }));
+        const thrown = await t.throwsAsync(async () => tracer.spawnAsync(
+            'failing-async',
+            async () => {
+                await Promise.resolve();
+                throw error;
+            },
+            { 'request.id': 'async-1' },
+        ));
 
         await Promise.resolve();
 
         const [span] = exporter.getFinishedSpans();
         t.is(thrown, error);
-        t.deepEqual(tracer.extract(error), [{ name: 'failing-async', attrs: {} }]);
+        t.deepEqual(tracer.extract(error), [{ name: 'failing-async', attrs: { 'request.id': 'async-1' } }]);
         t.is(span?.status.code, OTEL.SpanStatusCode.ERROR);
         t.is(span?.events[0]?.name, 'exception');
     } finally {
@@ -383,12 +391,12 @@ test.serial('Tracer.getFrames exposes the current nested frame stack', async (t)
                 await Promise.resolve();
                 const frames = tracer.getFrames();
                 t.deepEqual(frames, [
-                    { name: 'outer', attrs: { 'outer.attr': true } },
-                    { name: 'inner', attrs: {} },
+                    { name: 'outer', attrs: { 'outer.kind': 'root', 'outer.attr': true } },
+                    { name: 'inner', attrs: { 'inner.kind': 'child' } },
                 ]);
                 return frames.map((frame) => frame.name);
-            });
-        });
+            }, { 'inner.kind': 'child' });
+        }, { 'outer.kind': 'root' });
 
         t.deepEqual(names, ['outer', 'inner']);
         t.deepEqual(tracer.getFrames(), []);
