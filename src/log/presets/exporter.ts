@@ -3,11 +3,8 @@ import { Level } from './level.ts';
 
 
 export namespace Exporter {
-    export class Noop implements GenericExporter<typeof Level> {
-        public monolith() {}
-        public stream() {}
-    }
-    let globalExporter: GenericExporter<typeof Level> = new Noop();
+    export const noop: GenericExporter<typeof Level> = () => {};
+    let globalExporter: GenericExporter<typeof Level> = noop;
 
     export function setGlobalExporter(exporter: GenericExporter<typeof Level>): void {
         globalExporter = exporter;

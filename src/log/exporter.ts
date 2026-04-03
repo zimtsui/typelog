@@ -9,6 +9,5 @@ export interface Message<levelEnum extends LevelEnum.Prototype> {
 }
 
 export interface Exporter<levelEnum extends LevelEnum.Prototype> {
-    monolith(message: Message<levelEnum>): void;
-    stream(message: Message<levelEnum>): void;
+    (message: Message<levelEnum>): void;
 }
