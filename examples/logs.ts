@@ -1,4 +1,4 @@
-import { LevelMap, Preprocessor, LoggerProvider } from '@zimtsui/typelemetry/log';
+import { LevelMap, Preprocessor, LoggerProvider } from '@zimtsui/typelemetry/logs';
 import * as OTEL_SDK_LOGS from '@opentelemetry/sdk-logs';
 import * as OTEL_SDK from '@opentelemetry/sdk-node';
 
