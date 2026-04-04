@@ -9,6 +9,10 @@ import { Logger } from './logger.ts';
 export class LoggerProvider<levelMap extends LevelMap.Prototype> {
     public constructor(protected preprocessors: Preprocessor<levelMap>[]) {}
 
+    public addPreprocessor(preprocessor: Preprocessor<levelMap>) {
+        this.preprocessors.push(preprocessor);
+    }
+
     public getLogger<message>(scopeName: string, levelMap: levelMap, eventName?: string): Logger<levelMap, message> {
         const otelLoggerProvider = OTEL_API_LOGS.logs.getLoggerProvider();
         const otelLogger = otelLoggerProvider.getLogger(scopeName);
