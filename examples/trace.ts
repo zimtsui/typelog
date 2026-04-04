@@ -6,7 +6,7 @@ const sdk = new NodeSDK({
     traceExporter: new ConsoleSpanExporter(),
 });
 sdk.start();
-const tracer = Tracer.create('example', '0.0.1');
+const tracer = new Tracer('example');
 
 class A {
     @tracer.forkedAsync()

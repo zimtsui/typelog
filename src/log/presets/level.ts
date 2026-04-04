@@ -1,16 +1,17 @@
+import { LevelMap } from '../level.ts';
 
-export enum Level {
-    trace,
-    debug,
-    info,
-    warn,
-    error,
-    critical,
-    silent,
+export const levelMap = {
+    trace: 1,
+    debug: 5,
+    info: 9,
+    warn: 13,
+    error: 17,
+    critical: 21,
+    silent: 25,
 }
 
-export const envlevels: Record<string, Level> = {
-    debug: Level.trace,
-    development: Level.debug,
-    production: Level.warn,
+export const envlevels: Record<string, LevelMap.Number<typeof levelMap>> = {
+    debug: levelMap.trace,
+    development: levelMap.debug,
+    production: levelMap.error,
 };

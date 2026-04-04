@@ -1,56 +1,45 @@
-import { Channel, Exporter } from '@zimtsui/typelemetry/log';
-import { stderr } from 'node:process';
+import { LevelMap, Preprocessor, LoggerProvider } from '@zimtsui/typelemetry/log';
+import * as OTEL_SDK_LOGS from '@opentelemetry/sdk-logs';
+import * as OTEL_SDK from '@opentelemetry/sdk-node';
 
 // Declare all log levels whose values are sorted from verbose to severe.
-enum Level { trace, debug, info, warn, error }
+const levelMap = { debug: 5, info: 9, warn: 13, error: 17 } satisfies LevelMap.Prototype;
 
 // Declare log levels for different environments.
-const envlevels: Record<string, Level> = {
-    debug: Level.trace,
-    development: Level.debug,
-    production: Level.warn,
+const envlevels: Record<string, LevelMap.Number<typeof levelMap>> = {
+    debug: levelMap.debug,
+    development: levelMap.debug,
+    production: levelMap.warn,
 };
 
 // Determine the log level according to the environment variable.
-declare const ENV: string;
-const envLevel = envlevels[ENV] ?? Level.info;
+const ENV: string = 'development';
+const envLevel = envlevels[ENV] ?? levelMap.info;
 
 // Create exporters.
-const consoleExporter: Exporter = {
-    monolith(message) {
-        if (typeof message.payload === 'string') {
-            console.log(message.level);
-            console.log(message.payload);
-        }
-    },
-    stream(chunk) {
-        if (typeof chunk.payload === 'string') {
-            stderr.write(chunk.payload);
-        }
-    },
+const preprocessor: Preprocessor<typeof levelMap> = (data, next) => {
+    // Make data.message serializable and transfer it to OpenTelemetry API
+    if (data.levelNumber >= envLevel) next(JSON.parse(JSON.stringify(data.message)));
 };
-Exporter.setGlobalExporter(consoleExporter);
+
+// Create a LoggerProvider
+const loggerProvider = new LoggerProvider([preprocessor]);
 
 // Create loggers.
-const logger = {
-    number: Channel.create<typeof Level, number>(Level, (message, level) => {
-        if (level >= envLevel) Exporter.getGlobalExporter().monolith({
-            scope: 'main',
-            level: Level[level],
-            payload: message,
-            channel: 'number',
-        });
-    }),
-    string: Channel.create<typeof Level, string>(Level, (message, level) => {
-        if (level >= envLevel) Exporter.getGlobalExporter().monolith({
-            scope: 'main',
-            level: Level[level],
-            payload: message,
-            channel: 'string',
-        });
-    }),
+const loggers = {
+    cost: loggerProvider.getLogger<number>('Scope name', levelMap, 'Optional event name'),
+    text: loggerProvider.getLogger<string>('Scope name', levelMap, 'Optional event name'),
 };
 
+// Configure OpenTelemetry SDK
+new OTEL_SDK.NodeSDK({
+    logRecordProcessors: [
+        new OTEL_SDK_LOGS.SimpleLogRecordProcessor(
+            new OTEL_SDK_LOGS.ConsoleLogRecordExporter(),
+        ),
+    ],
+}).start();
+
 // Use loggers.
-logger.string.info('Hello');
-logger.number.warn(10086);
+loggers.cost.warn(10086);
+loggers.text.info('Hello');

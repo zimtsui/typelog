@@ -1,5 +1,5 @@
-export namespace LevelEnum {
-    export type Prototype = Record<string, unknown>;
-    export type Level<levelEnum extends LevelEnum.Prototype> = levelEnum[keyof levelEnum];
-    export type Name<levelEnum extends LevelEnum.Prototype> = Extract<keyof levelEnum, string>;
+export namespace LevelMap {
+    export type Prototype = Record<string, number>;
+    export type Number<levelMap extends LevelMap.Prototype> = levelMap[keyof levelMap];
+    export type Text<levelMap extends LevelMap.Prototype> = Extract<keyof levelMap, string>;
 }
