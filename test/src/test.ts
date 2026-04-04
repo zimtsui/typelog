@@ -1,17 +1,25 @@
 import test from 'ava';
 import * as OTEL from '@opentelemetry/api';
+import * as OTEL_LOGS from '@opentelemetry/api-logs';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import { InMemorySpanExporter, NodeTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-node';
-import { Channel } from '../../build/log/exports.js';
-import type { Exporter as GenericExporter, Message } from '../../build/log/exporter.js';
+import { LoggerProvider } from '../../build/log/provider.js';
+import type { Preprocessor } from '../../build/log/preprocessor.js';
 import * as Presets from '../../build/log/presets/exports.js';
-import { Stack } from '../../build/trace/stack.js';
 import { Tracer } from '../../build/trace/tracer.js';
+import { SpanStack } from '../../build/trace/span-stack.js';
 
-enum NumericLevel {
-    debug,
-    info,
-    warn,
+const numericLevelMap = {
+    debug: 5,
+    info: 9,
+    warn: 13,
+} as const;
+
+function snapshotSpanFrames() {
+    return Tracer.getSpanFrames().map((frame) => ({
+        name: frame.name,
+        attrs: { ...frame.attrs },
+    }));
 }
 
 function useTracerProvider() {
@@ -36,85 +44,131 @@ function useTracerProvider() {
     };
 }
 
+function useNoopLogProvider() {
+    const provider: OTEL_LOGS.LoggerProvider = {
+        getLogger() {
+            return {
+                emit() {},
+            };
+        },
+    };
+    OTEL_LOGS.logs.disable();
+    OTEL_LOGS.logs.setGlobalLoggerProvider(provider);
+
+    return {
+        cleanup() {
+            OTEL_LOGS.logs.disable();
+        },
+    };
+}
+
 test.afterEach.always(() => {
-    Presets.Exporter.setGlobalExporter(Presets.Exporter.noop);
+    OTEL_LOGS.logs.disable();
     OTEL.context.disable();
     OTEL.trace.disable();
     OTEL.propagation.disable();
 });
 
-test.serial('Channel.create routes messages by level name', (t) => {
-    const calls: Array<{ message: string; level: NumericLevel }> = [];
-    const channel = Channel.create(NumericLevel, (message: string, level) => {
-        calls.push({ message, level });
-    });
-
-    channel.debug('first');
-    channel.warn('second');
-
-    t.deepEqual(calls, [
-        { message: 'first', level: NumericLevel.debug },
-        { message: 'second', level: NumericLevel.warn },
-    ]);
-});
-
-test.serial('Channel.create rejects unknown properties', (t) => {
-    const channel = Channel.create(NumericLevel, () => {});
-
-    const error = t.throws(() => Reflect.get(channel as object, 'missing'));
-    t.true(error instanceof Error);
-});
-
-test.serial('preset Exporter global instance is configurable', (t) => {
-    const calls: Array<Message<typeof Presets.Level>> = [];
-    const exporter: GenericExporter<typeof Presets.Level> = (message) => {
-        calls.push(message);
+test.serial('LoggerProvider.getLogger passes raw messages and level metadata to preprocessors', (t) => {
+    const { cleanup } = useNoopLogProvider();
+    const rawDebug = { text: 'first', skipped: Symbol('debug') };
+    const rawWarn = { text: 'second', skipped: Symbol('warn') };
+    const seen: Preprocessor.Data[] = [];
+    const serializedBodies: unknown[] = [];
+    const preprocessor: Preprocessor<typeof numericLevelMap> = (data, next) => {
+        seen.push({ ...data, attributes: { ...data.attributes } });
+        const json = JSON.stringify(data.message);
+        serializedBodies.push(json === undefined ? undefined : JSON.parse(json));
+        next(null);
     };
-    const message = {
-        scope: 'scope',
-        channel: 'channel',
-        payload: { ok: true },
-        level: Presets.Level.info,
-    } satisfies Message<typeof Presets.Level>;
 
-    Presets.Exporter.setGlobalExporter(exporter);
+    try {
+        const provider = new LoggerProvider([preprocessor]);
+        const logger = provider.getLogger<{ text: string; skipped: symbol }>('scope', numericLevelMap, 'evt');
 
-    t.is(Presets.Exporter.getGlobalExporter(), exporter);
-    exporter(message);
-    t.deepEqual(calls, [message]);
+        logger.debug(rawDebug);
+        logger.warn(rawWarn, { requestId: 'r-1' });
+
+        t.is(seen.length, 2);
+        t.deepEqual(seen.map((item) => item.levelText), ['debug', 'warn']);
+        t.deepEqual(seen.map((item) => item.levelNumber), [numericLevelMap.debug, numericLevelMap.warn]);
+        t.true(seen.every((item) => item.scopeName === 'scope'));
+        t.true(seen.every((item) => item.eventName === 'evt'));
+        t.is(seen[0]?.message, rawDebug);
+        t.is(seen[1]?.message, rawWarn);
+        t.deepEqual(seen.map((item) => item.attributes), [{}, { requestId: 'r-1' }]);
+        t.true(seen.every((item) => Number.isFinite(item.observedTimestampMs)));
+        t.deepEqual(serializedBodies, [{ text: 'first' }, { text: 'second' }]);
+    } finally {
+        cleanup();
+    }
 });
 
-test.serial('preset Exporter.noop accepts arbitrary message payloads', (t) => {
-    const exporter: GenericExporter<typeof Presets.Level> = Presets.Exporter.noop;
-    const structured = {
-        scope: 'scope',
-        channel: 'channel',
-        payload: { text: 'hello', code: 7 },
-        level: Presets.Level.info,
-    } satisfies Message<typeof Presets.Level>;
-    const symbolPayload = {
-        scope: 'scope',
-        channel: 'channel',
-        payload: Symbol.for('payload'),
-        level: Presets.Level.debug,
-    } satisfies Message<typeof Presets.Level>;
+test.serial('LoggerProvider.getLogger rejects unknown properties', (t) => {
+    const { cleanup } = useNoopLogProvider();
 
-    t.notThrows(() => exporter(structured));
-    t.notThrows(() => exporter(symbolPayload));
+    try {
+        const provider = new LoggerProvider([]);
+        const logger = provider.getLogger('scope', numericLevelMap);
+
+        const error = t.throws(() => Reflect.get(logger as object, 'missing'));
+        t.true(error instanceof Error);
+    } finally {
+        cleanup();
+    }
 });
 
-test.serial('level presets barrel exposes expected ordering, environment map, and exporter namespace', (t) => {
-    t.is(Presets.Level.trace, 0);
-    t.true(Presets.Level.trace < Presets.Level.debug);
-    t.true(Presets.Level.error < Presets.Level.critical);
-    t.is(Presets.envlevels.debug, Presets.Level.trace);
-    t.is(Presets.envlevels.development, Presets.Level.debug);
-    t.is(Presets.envlevels.production, Presets.Level.warn);
-    t.is(Presets.Exporter.getGlobalExporter(), Presets.Exporter.noop);
+test.serial('LoggerProvider runs every preprocessor with the same log data', (t) => {
+    const { cleanup } = useNoopLogProvider();
+    const seen: Array<{ index: number; data: Preprocessor.Data }> = [];
+    const rawMessage = { ok: true, skipped: Symbol('raw') };
+    const serializedBodies: unknown[] = [];
+    const first: Preprocessor<typeof numericLevelMap> = (data, next) => {
+        seen.push({ index: 1, data: { ...data, attributes: { ...data.attributes } } });
+        const json = JSON.stringify(data.message);
+        serializedBodies.push(json === undefined ? undefined : JSON.parse(json));
+        next(null);
+    };
+    const second: Preprocessor<typeof numericLevelMap> = (data, next) => {
+        seen.push({ index: 2, data: { ...data, attributes: { ...data.attributes } } });
+        const json = JSON.stringify(data.message);
+        serializedBodies.push(json === undefined ? undefined : JSON.parse(json));
+        next(null);
+    };
+
+    try {
+        const provider = new LoggerProvider([first, second]);
+        const logger = provider.getLogger<typeof rawMessage>('scope', numericLevelMap, 'evt');
+
+        logger.info(rawMessage, { requestId: 'r-2' });
+
+        t.is(seen.length, 2);
+        t.deepEqual(seen.map((item) => item.index), [1, 2]);
+        t.true(seen.every((item) => item.data.scopeName === 'scope'));
+        t.true(seen.every((item) => item.data.eventName === 'evt'));
+        t.true(seen.every((item) => item.data.levelText === 'info'));
+        t.true(seen.every((item) => item.data.levelNumber === numericLevelMap.info));
+        t.true(seen.every((item) => item.data.message === rawMessage));
+        t.true(seen.every((item) => item.data.attributes.requestId === 'r-2'));
+        t.true(seen.every((item) => Number.isFinite(item.data.observedTimestampMs)));
+        t.deepEqual(serializedBodies, [{ ok: true }, { ok: true }]);
+    } finally {
+        cleanup();
+    }
 });
 
-test.serial('Stack tracks nested frames and current frame', async (t) => {
-    const stack = new Stack();
+test.serial('level presets barrel exposes expected ordering and environment map', (t) => {
+    t.is(Presets.levelMap.trace, 1);
+    t.true(Presets.levelMap.trace < Presets.levelMap.debug);
+    t.true(Presets.levelMap.error < Presets.levelMap.critical);
+    t.is(Presets.envlevels.debug, Presets.levelMap.trace);
+    t.is(Presets.envlevels.development, Presets.levelMap.debug);
+    t.is(Presets.envlevels.production, Presets.levelMap.error);
+    t.is(typeof Presets.preprocessor, 'function');
+});
+
+test.serial('SpanStack tracks nested frames and current frame', async (t) => {
+    const stack = SpanStack.getInstance();
 
     t.deepEqual(stack.getFrames(), []);
     t.is(stack.getFrame(), undefined);
@@ -144,7 +198,7 @@ test.serial('Stack tracks nested frames and current frame', async (t) => {
 
 test.serial('Tracer.spawnSync creates a root span and returns callback result', async (t) => {
     const { exporter, cleanup } = useTracerProvider();
-    const tracer = Tracer.create('scope', '1.0.0');
+    const tracer = new Tracer('scope');
 
     try {
         const value = tracer.spawnSync('root-sync', () => {
@@ -168,7 +222,7 @@ test.serial('Tracer.spawnSync creates a root span and returns callback result', 
 
 test.serial('Tracer.forkSync creates a child span from the active context', async (t) => {
     const { exporter, cleanup } = useTracerProvider();
-    const tracer = Tracer.create('scope');
+    const tracer = new Tracer('scope');
 
     try {
         tracer.spawnSync('parent', () => {
@@ -190,9 +244,9 @@ test.serial('Tracer.forkSync creates a child span from the active context', asyn
     }
 });
 
-test.serial('Tracer.createSync injects extracted frames into errors', async (t) => {
+test.serial('Tracer.spawnSync injects extracted frames into errors', async (t) => {
     const { exporter, cleanup } = useTracerProvider();
-    const tracer = Tracer.create('scope');
+    const tracer = new Tracer('scope');
     const error = new Error('boom');
 
     try {
@@ -208,7 +262,7 @@ test.serial('Tracer.createSync injects extracted frames into errors', async (t) 
 
         const [span] = exporter.getFinishedSpans();
         t.is(thrown, error);
-        t.deepEqual(tracer.extract(error), [{ name: 'failing-sync', attrs: { 'request.id': 'sync-1' } }]);
+        t.deepEqual(Tracer.extractErrorSpanFrames(error), [{ name: 'failing-sync', attrs: { 'request.id': 'sync-1' } }]);
         t.is(span?.status.code, OTEL.SpanStatusCode.ERROR);
         t.is(span?.events[0]?.name, 'exception');
     } finally {
@@ -218,7 +272,7 @@ test.serial('Tracer.createSync injects extracted frames into errors', async (t) 
 
 test.serial('Tracer.spawnAsync creates a root span for awaited work', async (t) => {
     const { exporter, cleanup } = useTracerProvider();
-    const tracer = Tracer.create('scope');
+    const tracer = new Tracer('scope');
 
     try {
         const value = await tracer.spawnAsync('root-async', async () => {
@@ -240,7 +294,7 @@ test.serial('Tracer.spawnAsync creates a root span for awaited work', async (t) 
 
 test.serial('Tracer spawn and fork apply initial attributes to created spans', async (t) => {
     const { exporter, cleanup } = useTracerProvider();
-    const tracer = Tracer.create('scope');
+    const tracer = new Tracer('scope');
 
     try {
         await tracer.spawnAsync('root-with-attrs', async () => {
@@ -268,7 +322,7 @@ test.serial('Tracer spawn and fork apply initial attributes to created spans', a
 
 test.serial('Tracer.forkAsync creates a child span across async boundaries', async (t) => {
     const { exporter, cleanup } = useTracerProvider();
-    const tracer = Tracer.create('scope');
+    const tracer = new Tracer('scope');
 
     try {
         await tracer.spawnAsync('parent-async', async () => {
@@ -292,9 +346,9 @@ test.serial('Tracer.forkAsync creates a child span across async boundaries', asy
     }
 });
 
-test.serial('Tracer.createAsync injects extracted frames into errors', async (t) => {
+test.serial('Tracer.spawnAsync injects extracted frames into errors', async (t) => {
     const { exporter, cleanup } = useTracerProvider();
-    const tracer = Tracer.create('scope');
+    const tracer = new Tracer('scope');
     const error = new Error('async boom');
 
     try {
@@ -311,7 +365,7 @@ test.serial('Tracer.createAsync injects extracted frames into errors', async (t)
 
         const [span] = exporter.getFinishedSpans();
         t.is(thrown, error);
-        t.deepEqual(tracer.extract(error), [{ name: 'failing-async', attrs: { 'request.id': 'async-1' } }]);
+        t.deepEqual(Tracer.extractErrorSpanFrames(error), [{ name: 'failing-async', attrs: { 'request.id': 'async-1' } }]);
         t.is(span?.status.code, OTEL.SpanStatusCode.ERROR);
         t.is(span?.events[0]?.name, 'exception');
     } finally {
@@ -319,9 +373,80 @@ test.serial('Tracer.createAsync injects extracted frames into errors', async (t)
     }
 });
 
+test.serial('Tracer.extractErrorSpanFrames preserves the throw-site span stack', async (t) => {
+    const { cleanup } = useTracerProvider();
+    const tracer = new Tracer('scope');
+    let throwSiteFrames: ReturnType<typeof snapshotSpanFrames> = [];
+
+    try {
+        const thrown = t.throws(() => tracer.spawnSync(
+            'outer',
+            () => {
+                Tracer.setSpanAttribute('request.id', 'req-1');
+                return tracer.forkSync('inner', () => {
+                    Tracer.setSpanAttribute('step', 'throw');
+                    const error = new Error('created and thrown inside inner');
+                    throwSiteFrames = snapshotSpanFrames();
+                    throw error;
+                }, { 'inner.kind': 'child' });
+            },
+            { 'outer.kind': 'root' },
+        ));
+
+        await Promise.resolve();
+
+        t.deepEqual(throwSiteFrames, [
+            { name: 'outer', attrs: { 'outer.kind': 'root', 'request.id': 'req-1' } },
+            { name: 'inner', attrs: { 'inner.kind': 'child', step: 'throw' } },
+        ]);
+        t.deepEqual(Tracer.extractErrorSpanFrames(thrown), throwSiteFrames);
+        t.deepEqual(Tracer.getSpanFrames(), []);
+    } finally {
+        await cleanup();
+    }
+});
+
+test.serial('Tracer records thrown errors on sync and async spans', async (t) => {
+    const { exporter, cleanup } = useTracerProvider();
+    const tracer = new Tracer('scope');
+    const syncError = new TypeError('sync boom');
+    const asyncError = new RangeError('async boom');
+
+    try {
+        t.throws(() => tracer.spawnSync('sync-error', () => {
+            throw syncError;
+        }), { is: syncError });
+
+        await t.throwsAsync(async () => tracer.spawnAsync('async-error', async () => {
+            await Promise.resolve();
+            throw asyncError;
+        }), { is: asyncError });
+
+        await Promise.resolve();
+
+        const syncSpan = exporter.getFinishedSpans().find((span) => span.name === 'sync-error');
+        const asyncSpan = exporter.getFinishedSpans().find((span) => span.name === 'async-error');
+        const syncException = syncSpan?.events.find((event) => event.name === 'exception');
+        const asyncException = asyncSpan?.events.find((event) => event.name === 'exception');
+
+        t.is(syncSpan?.status.code, OTEL.SpanStatusCode.ERROR);
+        t.is(asyncSpan?.status.code, OTEL.SpanStatusCode.ERROR);
+        t.truthy(syncException?.attributes);
+        t.truthy(asyncException?.attributes);
+        t.is(syncException?.attributes?.['exception.type'], 'TypeError');
+        t.is(syncException?.attributes?.['exception.message'], 'sync boom');
+        t.regex(String(syncException?.attributes?.['exception.stacktrace']), /TypeError: sync boom/);
+        t.is(asyncException?.attributes?.['exception.type'], 'RangeError');
+        t.is(asyncException?.attributes?.['exception.message'], 'async boom');
+        t.regex(String(asyncException?.attributes?.['exception.stacktrace']), /RangeError: async boom/);
+    } finally {
+        await cleanup();
+    }
+});
+
 test.serial('forkedAsync decorator injects nested frames when async method throws', async (t) => {
     const { exporter, cleanup } = useTracerProvider();
-    const tracer = Tracer.create('scope');
+    const tracer = new Tracer('scope');
     const error = new Error('decorated async boom');
 
     try {
@@ -344,7 +469,7 @@ test.serial('forkedAsync decorator injects nested frames when async method throw
         const loadSpan = spans.find((span) => span.name === 'load');
         t.is(thrown, error);
         t.deepEqual(
-            tracer.extract(error).map((frame) => frame.name),
+            Tracer.extractErrorSpanFrames(error).map((frame) => frame.name),
             ['parent', 'load'],
         );
         t.is(loadSpan?.status.code, OTEL.SpanStatusCode.ERROR);
@@ -354,16 +479,16 @@ test.serial('forkedAsync decorator injects nested frames when async method throw
     }
 });
 
-test.serial('Tracer.setAttr writes to the active span and extracted frames', async (t) => {
+test.serial('Tracer.setSpanAttribute writes to the active span and extracted frames', async (t) => {
     const { exporter, cleanup } = useTracerProvider();
-    const tracer = Tracer.create('scope');
+    const tracer = new Tracer('scope');
     const error = new Error('attr boom');
 
     try {
         const thrown = t.throws(() => tracer.spawnSync('outer', () => {
-            tracer.setAttr('request.id', 'r1');
+            Tracer.setSpanAttribute('request.id', 'r1');
             return tracer.forkSync('inner', () => {
-                tracer.setAttr('user.id', 7);
+                Tracer.setSpanAttribute('user.id', 7);
                 throw error;
             });
         }));
@@ -375,7 +500,7 @@ test.serial('Tracer.setAttr writes to the active span and extracted frames', asy
         const innerSpan = spans.find((span) => span.name === 'inner');
 
         t.is(thrown, error);
-        t.deepEqual(tracer.extract(error), [
+        t.deepEqual(Tracer.extractErrorSpanFrames(error), [
             { name: 'outer', attrs: { 'request.id': 'r1' } },
             { name: 'inner', attrs: { 'user.id': 7 } },
         ]);
@@ -386,18 +511,18 @@ test.serial('Tracer.setAttr writes to the active span and extracted frames', asy
     }
 });
 
-test.serial('Tracer.getFrames exposes the current nested frame stack', async (t) => {
+test.serial('Tracer.getSpanFrames exposes the current nested frame stack', async (t) => {
     const { cleanup } = useTracerProvider();
-    const tracer = Tracer.create('scope');
+    const tracer = new Tracer('scope');
 
     try {
-        t.deepEqual(tracer.getFrames(), []);
+        t.deepEqual(Tracer.getSpanFrames(), []);
 
         const names = await tracer.spawnAsync('outer', async () => {
-            tracer.setAttr('outer.attr', true);
+            Tracer.setSpanAttribute('outer.attr', true);
             return tracer.forkAsync('inner', async () => {
                 await Promise.resolve();
-                const frames = tracer.getFrames();
+                const frames = Tracer.getSpanFrames();
                 t.deepEqual(frames, [
                     { name: 'outer', attrs: { 'outer.kind': 'root', 'outer.attr': true } },
                     { name: 'inner', attrs: { 'inner.kind': 'child' } },
@@ -407,7 +532,7 @@ test.serial('Tracer.getFrames exposes the current nested frame stack', async (t)
         }, { 'outer.kind': 'root' });
 
         t.deepEqual(names, ['outer', 'inner']);
-        t.deepEqual(tracer.getFrames(), []);
+        t.deepEqual(Tracer.getSpanFrames(), []);
     } finally {
         await cleanup();
     }
@@ -415,7 +540,7 @@ test.serial('Tracer.getFrames exposes the current nested frame stack', async (t)
 
 test.serial('forked decorators preserve method name and create child spans', async (t) => {
     const { exporter, cleanup } = useTracerProvider();
-    const tracer = Tracer.create('scope');
+    const tracer = new Tracer('scope');
 
     try {
         class Service {
@@ -464,7 +589,7 @@ test.serial('forked decorators preserve method name and create child spans', asy
 
 test.serial('spawned decorators create root spans and allow custom names', async (t) => {
     const { exporter, cleanup } = useTracerProvider();
-    const tracer = Tracer.create('scope');
+    const tracer = new Tracer('scope');
 
     try {
         class Service {
@@ -505,21 +630,21 @@ test.serial('spawned decorators create root spans and allow custom names', async
 
 test.serial('Tracer.hookSync resumes a generator inside forked spans', async (t) => {
     const { exporter, cleanup } = useTracerProvider();
-    const tracer = Tracer.create('scope');
+    const tracer = new Tracer('scope');
 
     try {
         const activeSpanNames: string[] = [];
         function* source(): Generator<string, string, string> {
             activeSpanNames.push(OTEL.trace.getActiveSpan()?.spanContext().spanId ?? '');
-            tracer.setAttr('step', 'first');
+            Tracer.setSpanAttribute('step', 'first');
             const first = yield 'one';
             activeSpanNames.push(OTEL.trace.getActiveSpan()?.spanContext().spanId ?? '');
-            tracer.setAttr('input', first);
+            Tracer.setSpanAttribute('input', first);
             try {
                 yield `two:${first}`;
             } catch (e) {
                 activeSpanNames.push(OTEL.trace.getActiveSpan()?.spanContext().spanId ?? '');
-                tracer.setAttr('error', e instanceof Error ? e.message : 'unknown');
+                Tracer.setSpanAttribute('error', e instanceof Error ? e.message : 'unknown');
             }
             return 'done';
         }
@@ -550,7 +675,7 @@ test.serial('Tracer.hookSync resumes a generator inside forked spans', async (t)
 
 test.serial('Tracer.hookSync and hookAsync apply initial attributes on every resumed span', async (t) => {
     const { exporter, cleanup } = useTracerProvider();
-    const tracer = Tracer.create('scope');
+    const tracer = new Tracer('scope');
 
     try {
         function* syncSource(): Generator<string, string, string> {
@@ -597,24 +722,24 @@ test.serial('Tracer.hookSync and hookAsync apply initial attributes on every res
 
 test.serial('Tracer.hookAsync resumes an async generator inside forked spans', async (t) => {
     const { exporter, cleanup } = useTracerProvider();
-    const tracer = Tracer.create('scope');
+    const tracer = new Tracer('scope');
 
     try {
         const activeSpanNames: string[] = [];
         async function* source(): AsyncGenerator<string, string, string> {
             await Promise.resolve();
             activeSpanNames.push(OTEL.trace.getActiveSpan()?.spanContext().spanId ?? '');
-            tracer.setAttr('phase', 'first');
+            Tracer.setSpanAttribute('phase', 'first');
             const first = yield 'alpha';
             await Promise.resolve();
             activeSpanNames.push(OTEL.trace.getActiveSpan()?.spanContext().spanId ?? '');
-            tracer.setAttr('input', first);
+            Tracer.setSpanAttribute('input', first);
             try {
                 yield `beta:${first}`;
             } catch (e) {
                 await Promise.resolve();
                 activeSpanNames.push(OTEL.trace.getActiveSpan()?.spanContext().spanId ?? '');
-                tracer.setAttr('error', e instanceof Error ? e.message : 'unknown');
+                Tracer.setSpanAttribute('error', e instanceof Error ? e.message : 'unknown');
             }
             return 'done';
         }
