@@ -1,6 +1,6 @@
 {
   "name": "@zimtsui/typelemetry",
-  "version": "0.0.44",
+  "version": "0.0.45",
   "exports": {
     "./trace": "./build/trace/tracer.js",
     "./logs": "./build/logs/exports.js",
