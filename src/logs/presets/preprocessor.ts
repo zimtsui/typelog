@@ -3,7 +3,7 @@ import { stderr } from 'node:process';
 import { chalkStderr } from 'chalk';
 import { Tracer } from '../../trace/tracer.ts';
 import { levelMap } from './level.ts';
-import { Preprocessor } from '../preprocessor.ts';
+import { Preprocessor as GenericPreprocessor } from '../preprocessor.ts';
 import { SpanFrame } from '../../trace/span-stack.ts';
 
 
@@ -14,8 +14,8 @@ function readSpanFrames(payload: unknown): SpanFrame[] {
     } else return [];
 }
 
-
-export const preprocessor: Preprocessor<typeof levelMap> = (data) => {
+export type Preprocessor = GenericPreprocessor<typeof levelMap>;
+export const preprocessor: Preprocessor = (data) => {
     const firstLine: string[] = [];
 
     const timeString = '[' + new Date().toISOString() + ']';
