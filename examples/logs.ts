@@ -23,12 +23,12 @@ const preprocessor: Preprocessor<typeof levelMap> = (data, next) => {
 };
 
 // Create a LoggerProvider
-const loggerProvider = new LoggerProvider([preprocessor]);
+const loggerProvider = new LoggerProvider(levelMap);
 
 // Create loggers.
 const loggers = {
-    cost: loggerProvider.getLogger<number>('Scope name', levelMap, 'Optional event name'),
-    text: loggerProvider.getLogger<string>('Scope name', levelMap, 'Optional event name'),
+    cost: loggerProvider.getLogger<number>('Scope name', 'Optional event name'),
+    text: loggerProvider.getLogger<string>('Scope name', 'Optional event name'),
 };
 
 // Configure OpenTelemetry SDK

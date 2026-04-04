@@ -83,8 +83,9 @@ test.serial('LoggerProvider.getLogger passes raw messages and level metadata to 
     };
 
     try {
-        const provider = new LoggerProvider([preprocessor]);
-        const logger = provider.getLogger<{ text: string; skipped: symbol }>('scope', numericLevelMap, 'evt');
+        const provider = new LoggerProvider(numericLevelMap);
+        provider.addPreprocessor(preprocessor);
+        const logger = provider.getLogger<{ text: string; skipped: symbol }>('scope', 'evt');
 
         logger.debug(rawDebug);
         logger.warn(rawWarn, { requestId: 'r-1' });
@@ -108,8 +109,8 @@ test.serial('LoggerProvider.getLogger rejects unknown properties', (t) => {
     const { cleanup } = useNoopLogProvider();
 
     try {
-        const provider = new LoggerProvider([]);
-        const logger = provider.getLogger('scope', numericLevelMap);
+        const provider = new LoggerProvider(numericLevelMap);
+        const logger = provider.getLogger('scope');
 
         const error = t.throws(() => Reflect.get(logger as object, 'missing'));
         t.true(error instanceof Error);
@@ -137,8 +138,10 @@ test.serial('LoggerProvider runs every preprocessor with the same log data', (t)
     };
 
     try {
-        const provider = new LoggerProvider([first, second]);
-        const logger = provider.getLogger<typeof rawMessage>('scope', numericLevelMap, 'evt');
+        const provider = new LoggerProvider(numericLevelMap);
+        provider.addPreprocessor(first);
+        provider.addPreprocessor(second);
+        const logger = provider.getLogger<typeof rawMessage>('scope', 'evt');
 
         logger.info(rawMessage, { requestId: 'r-2' });
 

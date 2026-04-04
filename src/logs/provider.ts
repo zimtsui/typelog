@@ -7,22 +7,24 @@ import { Logger } from './logger.ts';
 
 
 export class LoggerProvider<levelMap extends LevelMap.Prototype> {
-    public constructor(protected preprocessors: Preprocessor<levelMap>[]) {}
+    protected preprocessors: Preprocessor<levelMap>[] = [];
+
+    public constructor(protected levelMap: levelMap) {}
 
     public addPreprocessor(preprocessor: Preprocessor<levelMap>) {
         this.preprocessors.push(preprocessor);
     }
 
-    public getLogger<message>(scopeName: string, levelMap: levelMap, eventName?: string): Logger<levelMap, message> {
+    public getLogger<message>(scopeName: string, eventName?: string): Logger<levelMap, message> {
         const otelLoggerProvider = OTEL_API_LOGS.logs.getLoggerProvider();
         const otelLogger = otelLoggerProvider.getLogger(scopeName);
         const that = this;
         return new Proxy({} as Logger<levelMap, message>, {
             get(target, prop) {
-                if (typeof prop === 'string' && Object.keys(levelMap).includes(prop)) {
+                if (typeof prop === 'string' && Object.keys(that.levelMap).includes(prop)) {
                     const now = Date.now();
                     const levelText = prop as LevelMap.Text<levelMap>;
-                    const levelNumber = levelMap[levelText]!;
+                    const levelNumber = that.levelMap[levelText]!;
                     const next: Preprocessor.Otel = body => {
                         otelLogger.emit({
                             body,
