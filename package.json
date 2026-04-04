@@ -3,8 +3,8 @@
   "version": "0.0.41",
   "exports": {
     "./trace": "./build/trace/tracer.js",
-    "./log": "./build/log/exports.js",
-    "./log/presets": "./build/log/presets/exports.js"
+    "./logs": "./build/logs/exports.js",
+    "./logs/presets": "./build/logs/presets/exports.js"
   },
   "description": "",
   "type": "module",

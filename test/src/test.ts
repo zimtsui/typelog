@@ -3,9 +3,9 @@ import * as OTEL from '@opentelemetry/api';
 import * as OTEL_LOGS from '@opentelemetry/api-logs';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import { InMemorySpanExporter, NodeTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-node';
-import { LoggerProvider } from '../../build/log/provider.js';
-import type { Preprocessor } from '../../build/log/preprocessor.js';
-import * as Presets from '../../build/log/presets/exports.js';
+import { LoggerProvider } from '../../build/logs/provider.js';
+import type { Preprocessor } from '../../build/logs/preprocessor.js';
+import * as Presets from '../../build/logs/presets/exports.js';
 import { Tracer } from '../../build/trace/tracer.js';
 import { SpanStack } from '../../build/trace/span-stack.js';
 
