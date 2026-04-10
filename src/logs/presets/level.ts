@@ -11,7 +11,7 @@ export const levelMap = {
 } satisfies LevelMap.Prototype;
 
 export const envlevels: Record<string, LevelMap.Number<typeof levelMap>> = {
-    debug: levelMap.trace,
-    development: levelMap.debug,
+    debug: levelMap.debug,
+    development: levelMap.info,
     production: levelMap.error,
 };
