@@ -164,10 +164,11 @@ test.serial('level presets barrel exposes expected ordering and environment map'
     t.is(Presets.levelMap.trace, 1);
     t.true(Presets.levelMap.trace < Presets.levelMap.debug);
     t.true(Presets.levelMap.error < Presets.levelMap.critical);
-    t.is(Presets.envlevels.debug, Presets.levelMap.trace);
-    t.is(Presets.envlevels.development, Presets.levelMap.debug);
+    t.is(Presets.envlevels.debug, Presets.levelMap.debug);
+    t.is(Presets.envlevels.development, Presets.levelMap.info);
     t.is(Presets.envlevels.production, Presets.levelMap.error);
     t.is(typeof Presets.preprocessor, 'function');
+    t.is(typeof Presets.loggerProvider.getLogger, 'function');
 });
 
 test.serial('SpanStack tracks nested frames and current frame', async (t) => {
