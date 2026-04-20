@@ -49,6 +49,9 @@ function useNoopLogProvider() {
         getLogger() {
             return {
                 emit() {},
+                enabled() {
+                    return true;
+                },
             };
         },
     };

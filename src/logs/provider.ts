@@ -25,7 +25,7 @@ export class LoggerProvider<levelMap extends LevelMap.Prototype> {
                     const now = Date.now();
                     const levelText = prop as LevelMap.Text<levelMap>;
                     const levelNumber = that.levelMap[levelText]!;
-                    const next: Preprocessor.Otel = body => {
+                    const next: Preprocessor.Next = body => {
                         otelLogger.emit({
                             body,
                             severityText: levelText,
