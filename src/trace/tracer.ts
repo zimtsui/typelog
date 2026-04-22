@@ -47,7 +47,7 @@ export class Tracer {
             }
             return r.value;
         } finally {
-            generator[Symbol.dispose]?.();
+            generator[Symbol.dispose]();
         }
     }
 
@@ -69,7 +69,7 @@ export class Tracer {
             }
             return r.value;
         } finally {
-            await generator[Symbol.asyncDispose]?.();
+            await generator[Symbol.asyncDispose]();
         }
     }
 
