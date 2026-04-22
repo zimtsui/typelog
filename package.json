@@ -31,7 +31,12 @@
   },
   "peerDependencies": {
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/api-logs": "^0.215.0",
+    "@opentelemetry/api-logs": "^0.215.0"
+  },
+  "dependencies": {
     "@types/node": "^24.12.2"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }
