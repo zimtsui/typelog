@@ -4,7 +4,7 @@ import * as OTEL_API from '@opentelemetry/api';
 
 
 
-export interface Preprocessor<levelMap extends LevelMap.Prototype>{
+export interface Preprocessor<levelMap extends LevelMap.Proto>{
     (data: Preprocessor.Data, next: Preprocessor.Next): void;
 }
 export namespace Preprocessor {

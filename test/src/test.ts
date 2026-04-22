@@ -3,6 +3,7 @@ import * as OTEL from '@opentelemetry/api';
 import * as OTEL_LOGS from '@opentelemetry/api-logs';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import { InMemorySpanExporter, NodeTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-node';
+import { LevelMap } from '../../build/logs/level.js';
 import { LoggerProvider } from '../../build/logs/provider.js';
 import type { Preprocessor } from '../../build/logs/preprocessor.js';
 import * as Presets from '../../build/logs/presets/exports.js';
@@ -14,6 +15,14 @@ const numericLevelMap = {
     info: 9,
     warn: 13,
 } as const;
+
+function readLevelValue(levelMap: LevelMap.Proto, level: string) {
+    return levelMap[level];
+}
+
+function invokePreprocessorNext(next: Preprocessor.Next, body: OTEL_LOGS.AnyValue) {
+    next(body);
+}
 
 function snapshotSpanFrames() {
     return Tracer.getSpanFrames().map((frame) => ({
@@ -163,15 +172,27 @@ test.serial('LoggerProvider runs every preprocessor with the same log data', (t)
     }
 });
 
-test.serial('level presets barrel exposes expected ordering and environment map', (t) => {
+test.serial('level presets barrel exposes expected ordering and provider exports', (t) => {
     t.is(Presets.levelMap.trace, 1);
     t.true(Presets.levelMap.trace < Presets.levelMap.debug);
     t.true(Presets.levelMap.error < Presets.levelMap.critical);
-    t.is(Presets.envlevels.debug, Presets.levelMap.debug);
-    t.is(Presets.envlevels.development, Presets.levelMap.info);
-    t.is(Presets.envlevels.production, Presets.levelMap.error);
     t.is(typeof Presets.preprocessor, 'function');
     t.is(typeof Presets.loggerProvider.getLogger, 'function');
+    t.is(readLevelValue(Presets.levelMap, 'debug'), Presets.levelMap.debug);
+});
+
+test.serial('Preprocessor.Next accepts OTEL serializable bodies', (t) => {
+    const seen: OTEL_LOGS.AnyValue[] = [];
+
+    const next: Preprocessor.Next = body => {
+        seen.push(body);
+    };
+
+    invokePreprocessorNext(next, {
+        stringValue: 'serialized',
+    });
+
+    t.deepEqual(seen, [{ stringValue: 'serialized' }]);
 });
 
 test.serial('SpanStack tracks nested frames and current frame', async (t) => {

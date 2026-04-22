@@ -8,10 +8,4 @@ export const levelMap = {
     error: 17,
     critical: 21,
     silent: 25,
-} satisfies LevelMap.Prototype;
-
-export const envlevels: Record<string, LevelMap.Number<typeof levelMap>> = {
-    debug: levelMap.debug,
-    development: levelMap.info,
-    production: levelMap.error,
-};
+} satisfies LevelMap.Proto;

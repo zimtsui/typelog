@@ -15,7 +15,7 @@ function readSpanFrames(payload: unknown): SpanFrame[] {
 }
 
 export type Preprocessor = GenericPreprocessor<typeof levelMap>;
-export const preprocessor: Preprocessor = (data) => {
+export const preprocessor: Preprocessor = data => {
     const firstLine: string[] = [];
 
     const timeString = '[' + new Date().toISOString() + ']';

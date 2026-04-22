@@ -6,7 +6,7 @@ import { Logger } from './logger.ts';
 
 
 
-export class LoggerProvider<levelMap extends LevelMap.Prototype> {
+export class LoggerProvider<levelMap extends LevelMap.Proto> {
     protected preprocessors: Preprocessor<levelMap>[] = [];
 
     public constructor(protected levelMap: levelMap) {}

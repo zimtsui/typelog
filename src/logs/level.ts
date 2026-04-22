@@ -1,5 +1,5 @@
 export namespace LevelMap {
-    export type Prototype = Record<string, number>;
-    export type Number<levelMap extends LevelMap.Prototype> = levelMap[keyof levelMap];
-    export type Text<levelMap extends LevelMap.Prototype> = Extract<keyof levelMap, string>;
+    export type Proto = Record<string, number>;
+    export type Number<levelMap extends LevelMap.Proto> = levelMap[keyof levelMap];
+    export type Text<levelMap extends LevelMap.Proto> = Extract<keyof levelMap, string>;
 }

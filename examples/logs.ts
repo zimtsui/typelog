@@ -1,29 +1,24 @@
 import { LevelMap, Preprocessor, LoggerProvider } from '@zimtsui/typelemetry/logs';
 import * as OTEL_SDK_LOGS from '@opentelemetry/sdk-logs';
 import * as OTEL_SDK from '@opentelemetry/sdk-node';
+import { env } from 'node:process';
 
 // Declare all log levels whose values are sorted from verbose to severe.
-const levelMap = { debug: 5, info: 9, warn: 13, error: 17 } satisfies LevelMap.Prototype;
-
-// Declare log levels for different environments.
-const envlevels: Record<string, LevelMap.Number<typeof levelMap>> = {
-    debug: levelMap.debug,
-    development: levelMap.debug,
-    production: levelMap.warn,
-};
+const levelMap = { debug: 5, info: 9, warn: 13, error: 17 } satisfies LevelMap.Proto;
 
 // Determine the log level according to the environment variable.
-const ENV: string = 'development';
-const envLevel = envlevels[ENV] ?? levelMap.info;
+const envLevel = env.LOG_LEVEL && (levelMap as LevelMap.Proto)[env.LOG_LEVEL] || levelMap.info;
 
 // Create exporters.
 const preprocessor: Preprocessor<typeof levelMap> = (data, next) => {
-    // Make data.message serializable and transfer it to OpenTelemetry API
+    // Make data.message serializable and pass it through into OpenTelemetry API
     if (data.levelNumber >= envLevel) next(JSON.parse(JSON.stringify(data.message)));
 };
 
 // Create a LoggerProvider
 const loggerProvider = new LoggerProvider(levelMap);
+loggerProvider.addPreprocessor(preprocessor);
+
 
 // Create loggers.
 const loggers = {
